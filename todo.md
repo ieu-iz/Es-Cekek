@@ -257,6 +257,12 @@ At the end of EVERY session that touches code:
 - [x] ~~Export template belum terpasang~~ — **DIPERBAIKI** (Task 11b): template terpasang,
       4 build sudah ada di `build/`. Tinggal install APK di HP asli (belum ada perangkat via adb).
 - [ ] GPU PC ini tidak mendukung D3D12/Vulkan → Godot jatuh ke renderer Compatibility/OpenGL (game tetap jalan normal, tapi belum pernah dinilai secara visual)
+- [ ] **QA di HP Android asli belum dilakukan** — tapi **tidak butuh adb**: APK sudah diverifikasi
+      signed (`apksigner verify` → "Verifies", v2 + v3, signer `CN=Android Debug`), jadi cukup
+      salin `build/android/EsCekek.apk` ke HP → ketuk file-nya di file manager → install.
+- [x] ~~Gaya install Android selalu harus `adb install`~~ — **DIPERBAIKI**: `Readme.md`
+      sekarang punya bagian **"Cara paling gampang — TANPA adb"** (copy via USB MTP / Drive /
+      WhatsApp → ketuk `.apk` di HP → izinkan "Install unknown apps"). `.idsig` tidak perlu dikirim.
 
 ---
 
@@ -264,6 +270,7 @@ At the end of EVERY session that touches code:
 
 | Date | Session | Changes | Test result |
 |---|---|---|---|
+| 2026-10-21 | Cara install APK tanpa adb | APK diverifikasi **signed** via `apksigner verify` → "Verifies", skema v2 + v3, signer `CN=Android Debug` (RSA 2048) → aman di-*sideload*. `Readme.md` ditambah bagian **"⭐ Cara paling gampang — TANPA adb"** (copy via USB MTP / Google Drive / WhatsApp → ketuk `.apk` di file manager → izinkan "Install unknown apps"); `adb` jelasin sebagai **alternatif** (full path `C:\Users\WIN10\AppData\Local\Android\Sdk\platform-tools\adb.exe`, belum ada di PATH); catatan `.idsig` tidak perlu dikirim ke HP | 246/246 ✅ (tidak ada perubahan kode — docs only) |
 | 2026-10-21 | Commit ke GitHub | Semua pekerjaan Task 12c–12f + 13 + 14 di-commit & push ke `origin/master` (`https://github.com/ieu-iz/Es-Cekek.git`): commit `6f6b967`, 470 file, +15.373 baris. File sampah `ERR')` dihapus. Push pertama **ditolak** (remote punya commit `8054e42 "add readme"` yang belum ada di lokal) → diselesaikan via `git rebase origin/master` + resolusi konflik `Readme.md` add/add (versi lokal yang lebih baru dipertahankan). Branch `worktree/zoocode` **tidak** disentuh. Verifikasi setelah rebase: 246/246 hijau, boot bersih, `git grep` tidak menemukan conflict marker | 246/246 ✅ boot OK |
 | 2026-10-21 | Task 12c–12f + re-export | Pipeline asset Kenney CC0 (`scripts/prepare_kenney_assets.ps1`) → `assets/kenney/` 197 GLB (10,6 MB) + 4 colormap; karakter player/pelanggan pakai mini-characters GLB; 3 lokasi dibangun dari mesh Kenney; propsi stand (meja konter, 3 kursi, 5 bangku, kasir, rak prep) diganti mesh sungguhan; **bug collision tersembunyi ditemukan** (`CounterShape` tanpa `type=` → `Counter` tanpa collision shape → panel prep tak bisa dibuka saat main) + 7 asersi regresi; 4 build di-ekspor ulang (Windows pck 181 KB → 3,4 MB, Android **harus `--export-debug`** supaya signed); alat ukur sementara dihapus; `context.md`/`todo.md`/`Readme.md`/plan disinkronkan | 246/246 ✅ boot OK (exe boot bersih) |
 | 2026-10-21 | Task 11b + 11c | Export template Godot 4.7.2 terpasang (35 file di `%APPDATA%\Godot\export_templates\4.7.2.stable`); 4 build headless sukses — Windows `.exe` 109,1 MB (boot bersih), Linux 73,5 MB, macOS zip 59,9 MB, Android APK 86,5 MB (`com.escekek.game`); `assets/icon.png` dibuat + `config/icon` diset (Android butuh ikon); `java_sdk_path` + debug keystore diset di `editor_settings-4.7.tres`; **bug virtual joystick diperbaiki** (`set_move_vector` tidak pernah ada → gerak sentuh tak pernah sampai ke `Player`); 8 asersi regresi baru; dokumen (`context.md`/`todo.md`/`Readme.md`/plan) disinkronkan | 233/233 ✅ boot OK |

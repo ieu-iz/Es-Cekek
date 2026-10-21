@@ -510,6 +510,7 @@ from the tree: `get_tree().root.get_node_or_null("Economy")` (see `UILayer._curr
 | 15 | Gaya visual **belum pernah dilihat mata** di editor — semua penempatan mesh Kenney diverifikasi **numerik** (AABB vertex-level: alas di y=0, properti di atas meja di y=0,920, kaki kursi/bangku di lantai) tapi belum di-eye-ball. Kemungkinan perlu taste pass (skala kursi/angkot, posisi kasir, kepadatan objek) | `src/stand/Stand.tscn`, `locations/*.tscn` | 🟡 open |
 | 16 | Sebagian mesh Kenney memakai `baseColorFactor` (warna per-vertex), sebagian lagi merujuk `Textures/colormap.png` eksternal. 4 pack punya `colormap` (mini, commercial, suburban, food); `roads` & `furniture` tidak punya folder `Textures/` → 4 colormap, bukan 5 | `assets/kenney/*/Textures/` | 🟢 documented |
 | 17 | Character/pelanggan pakai GLB mini-characters dengan `MODEL_SCALE 2.53` + `MODEL_YAW PI`; **pose kesal** (crouch) yang sebelumnya berupa `body.scale.y` mungkin perlu diselaraskan dengan tinggi model | `src/entities/KenneyCharacter.gd`, `src/entities/Customer.gd` | 🟡 open (perlu taste pass) |
+| 18 | **QA perangkat Android asli belum dilakukan** — tapi sekarang **tidak butuh adb sama sekali**: APK sudah diverifikasi signed (`apksigner verify` → "Verifies", skema v2 + v3, signer `CN=Android Debug`), jadi bisa di-*sideload* cukup dengan menyalin file `.apk` ke HP lalu mengetuknya di file manager. Yang tersisa cuma "belum pernah dijalankan di HP" | `build/android/EsCekek.apk` | 🟡 open (menunggu dicoba di HP) |
 
 ---
 
