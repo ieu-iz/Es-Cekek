@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="LocationDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/resources/LocationDef.gd" id="1_locationdef"]
+
+[resource]
+script = ExtResource("1_locationdef")
+id = &"sekolah"
+display_name = "Sekolah"
+scene_path = "res://locations/sekolah.tscn"
+rent_cost = 20.0
+foot_traffic = 0.6
+annoyance_rate = 0.7
+seats = 3
+max_queue = 5
+color_palette = {
+"ground": Color(0.38, 0.44, 0.4, 1),
+"accent": Color(0.9, 0.75, 0.2, 1),
+"sky": Color(0.5, 0.68, 0.9, 1)
+}
+description = "Gerbang sekolah. Ramai saat jam istirahat, pelanggan等行业cil."

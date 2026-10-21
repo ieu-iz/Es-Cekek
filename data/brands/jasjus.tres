@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="SachetBrand" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/resources/SachetBrand.gd" id="1_sachetbrand"]
+
+[resource]
+script = ExtResource("1_sachetbrand")
+id = &"jasjus"
+display_name = "Jasjus"
+base_cost = 2000.0
+price_tier = 2000
+base_quality = 0.6
+sweetness = 0.5
+rarity = 0.3
+color_tint = Color(0.4, 0.7, 0.95, 1)
+description = "Rendengan mid tier. Rasa origina, jingga bening."

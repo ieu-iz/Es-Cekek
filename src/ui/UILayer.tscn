@@ -1,0 +1,240 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/VirtualJoystick.gd" id="1_joystick"]
+
+[node name="UILayer" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="HUD" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Money" type="Label" parent="HUD"]
+anchor_right = 1.0
+offset_left = 24.0
+offset_top = 20.0
+offset_right = 424.0
+offset_bottom = 64.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.92, 0.55, 1)
+theme_override_font_sizes/font_size = 34
+text = "Rp 0"
+
+[node name="Day" type="Label" parent="HUD"]
+anchor_right = 1.0
+offset_left = 24.0
+offset_top = 66.0
+offset_right = 424.0
+offset_bottom = 104.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.85, 0.92, 1, 1)
+theme_override_font_sizes/font_size = 24
+text = "Hari 1"
+
+[node name="OrderCallout" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Message" type="Label" parent="OrderCallout"]
+anchor_right = 1.0
+offset_left = 0.0
+offset_top = 150.0
+offset_right = 0.0
+offset_bottom = 200.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.85, 0.35, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.8)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 30
+text = "Bang mau es Tejus!"
+horizontal_alignment = 1
+
+[node name="Overlay" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Loading" type="Label" parent="Overlay"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 0.0
+offset_top = -140.0
+offset_right = 0.0
+offset_bottom = -100.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.8)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 26
+text = "Menghubungkan…"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Error" type="Label" parent="Overlay"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 0.0
+offset_top = -190.0
+offset_right = 0.0
+offset_bottom = -150.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.4, 0.35, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 22
+text = ""
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="TravelPanel" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Background" type="ColorRect" parent="TravelPanel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.55)
+
+[node name="List" type="VBoxContainer" parent="TravelPanel"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -140.0
+offset_right = 200.0
+offset_bottom = 140.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="Title" type="Label" parent="TravelPanel/List"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.92, 0.55, 1)
+theme_override_font_sizes/font_size = 28
+text = "Pindah Lokasi"
+horizontal_alignment = 1
+
+[node name="Close" type="Button" parent="TravelPanel"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -100.0
+offset_top = -120.0
+offset_right = 100.0
+offset_bottom = -64.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_font_sizes/font_size = 22
+text = "Tutup"
+
+[node name="DayEnd" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Background" type="ColorRect" parent="DayEnd"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.7)
+
+[node name="Summary" type="Label" parent="DayEnd"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -220.0
+offset_top = -160.0
+offset_right = 220.0
+offset_bottom = 60.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 26
+text = ""
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Continue" type="Button" parent="DayEnd"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -120.0
+offset_top = 80.0
+offset_right = 120.0
+offset_bottom = 136.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 24
+text = "Lanjut"
+
+[node name="TouchButtons" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Interact" type="Button" parent="TouchButtons"]
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -190.0
+offset_top = -190.0
+offset_right = -40.0
+offset_bottom = -40.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_font_sizes/font_size = 22
+text = "INTERAK"
+
+[node name="Travel" type="Button" parent="TouchButtons"]
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -190.0
+offset_top = -330.0
+offset_right = -40.0
+offset_bottom = -200.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_font_sizes/font_size = 22
+text = "PINDAH"
+
+[node name="VirtualJoystick" type="Control" parent="."]
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -260.0
+offset_right = 264.0
+offset_bottom = -20.0
+grow_vertical = 0
+script = ExtResource("1_joystick")
+radius = 110.0

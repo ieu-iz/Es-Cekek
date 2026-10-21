@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="SachetBrand" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/resources/SachetBrand.gd" id="1_sachetbrand"]
+
+[resource]
+script = ExtResource("1_sachetbrand")
+id = &"frenta"
+display_name = "Frenta"
+base_cost = 5000.0
+price_tier = 5000
+base_quality = 0.85
+sweetness = 0.45
+rarity = 0.12
+color_tint = Color(0.35, 0.45, 0.25, 1)
+description = "Rendengan premium. Rasa apel, melon, pilihan paling disukai."

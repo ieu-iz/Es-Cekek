@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="LocationDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/resources/LocationDef.gd" id="1_locationdef"]
+
+[resource]
+script = ExtResource("1_locationdef")
+id = &"rumah"
+display_name = "Rumah"
+scene_path = "res://locations/rumah.tscn"
+rent_cost = 15.0
+foot_traffic = 0.25
+annoyance_rate = 0.4
+seats = 3
+max_queue = 5
+color_palette = {
+"ground": Color(0.45, 0.45, 0.42, 1),
+"accent": Color(0.4, 0.6, 0.45, 1),
+"sky": Color(0.6, 0.75, 0.88, 1)
+}
+description = "Depan rumah. Sepi, tapi sewa paling murah."

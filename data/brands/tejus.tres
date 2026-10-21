@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="SachetBrand" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/resources/SachetBrand.gd" id="1_sachetbrand"]
+
+[resource]
+script = ExtResource("1_sachetbrand")
+id = &"tejus"
+display_name = "Tejus"
+base_cost = 1000.0
+price_tier = 1000
+base_quality = 0.35
+sweetness = 0.75
+rarity = 0.55
+color_tint = Color(0.98, 0.62, 0.18, 1)
+description = "Rendengan paling murah. Rasa mangis dan kenyal."

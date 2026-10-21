@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="SachetBrand" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/resources/SachetBrand.gd" id="1_sachetbrand"]
+
+[resource]
+script = ExtResource("1_sachetbrand")
+id = &"marimas"
+display_name = "Marimas"
+base_cost = 2000.0
+price_tier = 2000
+base_quality = 0.6
+sweetness = 0.6
+rarity = 0.35
+color_tint = Color(0.95, 0.35, 0.42, 1)
+description = "Rendengan mid tier. Rasa Timeout,meric dunk."

@@ -1,0 +1,43 @@
+; Engine configuration file.
+; Es Cekek — MVP v1 (Godot 4.x)
+; Plan Task 1: project scaffolding, 3D / Mobile renderer, folder layout.
+
+config_version=5
+
+[application]
+
+config/name="Es Cekek"
+config/description="Simulasi warung es di kantong plastik (rendengan) — 3D open world."
+run/main_scene="res://src/Main.tscn"
+config/features=PackedStringArray("4.3", "Mobile")
+
+[autoload]
+
+InputSetup = "res://src/autoload/InputSetup.gd"
+Inventory = "res://src/autoload/Inventory.gd"
+LocationManager = "res://src/autoload/LocationManager.gd"
+Economy = "res://src/autoload/Economy.gd"
+TimeOfDay = "res://src/autoload/TimeOfDay.gd"
+UILayer = "res://src/autoload/UILayer.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/handheld/orientation=0
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+pointing/emulate_mouse_from_touch=true
+
+[physics]
+
+3d/default_gravity=9.8
+
+[rendering]
+
+renderer/rendering_method="mobile"
+textures/vram_compression/import_etc2_astc=true
+anti_aliasing/quality/msaa_3d=1

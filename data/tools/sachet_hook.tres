@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="Tool" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/resources/Tool.gd" id="1_tool"]
+
+[resource]
+script = ExtResource("1_tool")
+id = &"sachet_hook"
+display_name = "Gantungan Sachet"
+cost = 0.0
+quality_mod = 1.0
+capacity_mod = 0.0
+description = "Gantungan kawat untuk menggantung paket rendengan."

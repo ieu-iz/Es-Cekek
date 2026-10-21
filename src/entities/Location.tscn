@@ -1,0 +1,64 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://src/entities/Location.gd" id="1_location"]
+
+[sub_resource type="StandardMaterial3D" id="1_ground_mat"]
+albedo_color = Color(0.42, 0.4, 0.36, 1)
+roughness = 0.95
+metallic = 0.0
+
+[sub_resource type="BoxMesh" id="1_ground_mesh"]
+size = Vector3(40.0, 0.4, 40.0)
+
+[sub_resource type="BoxShape3D" id="1_ground_shape"]
+size = Vector3(40.0, 0.4, 40.0)
+
+[sub_resource type="BoxMesh" id="1_counter_mesh"]
+size = Vector3(2.6, 1.0, 0.9)
+
+[sub_resource type="BoxShape3D" id="1_counter_shape"]
+size = Vector3(2.6, 1.0, 0.9)
+
+[sub_resource type="BoxMesh" id="1_prop_mesh"]
+size = Vector3(1.2, 2.4, 0.6)
+
+[node name="Location" type="Node3D"]
+script = ExtResource("1_location")
+spawn_offset = Vector3(0.0, 0.1, 2.6)
+
+[node name="StandSlot" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+
+[node name="Counter" type="MeshInstance3D" parent="StandSlot"]
+mesh = SubResource("1_counter_mesh")
+position = Vector3(0.0, 0.5, 0.0)
+
+[node name="StandBody" type="StaticBody3D" parent="StandSlot"]
+groups = ["stand"]
+
+[node name="CounterShape" type="CollisionShape3D" parent="StandSlot/StandBody"]
+shape = SubResource("1_counter_shape")
+position = Vector3(0.0, 0.5, 0.0)
+
+[node name="CustomerSpawner" type="Node3D" parent="."]
+
+[node name="Props" type="Node3D" parent="."]
+
+[node name="Prop_1" type="MeshInstance3D" parent="Props"]
+mesh = SubResource("1_prop_mesh")
+position = Vector3(-6.0, 1.2, -8.0)
+
+[node name="Prop_2" type="MeshInstance3D" parent="Props"]
+mesh = SubResource("1_prop_mesh")
+position = Vector3(6.0, 1.2, -8.0)
+
+[node name="Ground" type="StaticBody3D" parent="."]
+
+[node name="GroundShape" type="CollisionShape3D" parent="Ground"]
+shape = SubResource("1_ground_shape")
+position = Vector3(0.0, -0.2, 0.0)
+
+[node name="GroundMesh" type="MeshInstance3D" parent="Ground"]
+mesh = SubResource("1_ground_mesh")
+material_override = SubResource("1_ground_mat")
+position = Vector3(0.0, -0.2, 0.0)

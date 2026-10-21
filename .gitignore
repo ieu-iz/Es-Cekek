@@ -1,0 +1,14 @@
+# Godot
+.import/
+.godot/
+export.cfg
+export_presets.cfg
+
+# Builds
+build/
+releases/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
