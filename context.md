@@ -12,6 +12,13 @@
 - **MVP v1 ships**: Windows/Mac/Linux + Android APK. Web/iOS/console deferred. No network. Single player.
 - **Working dir**: `c:/Users/WIN10/Documents/Project/Es Cekek`
 - **Godot binary**: `C:\Users\WIN10\AppData\Local\Godot\Godot_v4.7.2-stable_win64_console.exe` (override with the `GODOT` env var)
+- **Git**: repo `https://github.com/ieu-iz/Es-Cekek.git`, branch **`master`** = `origin/master`.
+  HEAD saat ini: **`6f6b967`** ("feat: asset 3D Kenney CC0 … + 4 build signed", 470 file).
+  Riwayat linear: `bd1e00d → f463401 → 9da2c19 → 8054e42 → 6f6b967`.
+  Branch **`worktree/zoocode`** ada tapi di-checkout di worktree lain
+  (`C:/Users/WIN10/.roo/worktrees/Es Cekek-jh6ll`) — **jangan disentuh** dari repo utama.
+  `.gitignore` sengaja **tidak** meng-exclude `export_presets.cfg` (harus ikut ter-commit
+  supaya build bisa direproduksi), dan meng-exclude `.godot/`, `.import/`, `build/`, `releases/`.
 
 ### Quick commands
 
@@ -508,7 +515,31 @@ from the tree: `get_tree().root.get_node_or_null("Economy")` (see `UILayer._curr
 
 ## 13. Recent Changes (newest first)
 
-### Latest — Task 12c–12f: asset Kenney CC0 masuk (karakter, lokasi, propsi stand) + re-export (2026-10-21)
+### Latest — Commit ke GitHub: `origin/master` = `6f6b967` (2026-10-21)
+
+1. Seluruh pekerjaan Task 12c–12f + 13 + 14 di-commit & push ke
+   `https://github.com/ieu-iz/Es-Cekek.git` branch `master`:
+   commit **`6f6b967`** — 470 file, +15.373 / −283 baris.
+2. File sampah `ERR')` (0 byte, artefak redirect shell yang salah) dihapus
+   sebelum staging — tidak ikut ter-commit.
+3. **Push pertama DITOLAK**: remote sudah punya commit `8054e42 "add readme"`
+   (author: Muhamad Faiz) yang belum ada di lokal → divergensi 1-vs-1.
+   Diselesaikan dengan `git rebase origin/master` (bukan force-push, supaya
+   commit remote tetap ada di riwayat).
+4. **Konflik `Readme.md` (add/add)**: versi remote adalah *ancestor* yang lebih
+   lama (status "In Development", "170+ asersi", belum ada cara export / kredit
+   aset / ukuran build). Versi lokal (status MVP Playable + 4 build, 246 asersi,
+   export CLI, kredit Kenney CC0) adalah superset → versi lokal yang dipertahankan
+   (`git checkout --theirs`).
+5. Branch **`worktree/zoocode`** (checkout di worktree lain) **tidak** disentuh —
+   masih di `9da2c19`.
+6. Verifikasi setelah rebase: `scripts\run_tests.cmd --boot` → **246/246 cek lolos,
+   0 gagal, boot bersih**; `git grep` tidak menemukan penanda konflik di file
+   mana pun (satu-satunya hasil match adalah baris dokumentasi di §9 yang
+   membahas penanda SEARCH itu sendiri).
+7. Riwayat `master` sekarang linear: `bd1e00d → f463401 → 9da2c19 → 8054e42 → 6f6b967`.
+
+### Task 12c–12f: asset Kenney CC0 masuk (karakter, lokasi, propsi stand) + re-export (2026-10-21)
 
 1. **Task 12c — pipeline asset Kenney (CC0)**: `scripts/prepare_kenney_assets.ps1` mengunduh 6 pack resmi
    Kenney, mengambil subset yang dipakai, menyalin `Textures/colormap.png`, lalu memaksa re-import
