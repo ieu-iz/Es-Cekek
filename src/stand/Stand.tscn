@@ -1,0 +1,116 @@
+[gd_scene load_steps=12 format=3]
+
+[ext_resource type="Script" path="res://src/stand/Stand.gd" id="1_stand"]
+[ext_resource type="Script" path="res://src/stand/StandEquipment.gd" id="2_equipment"]
+[ext_resource type="PackedScene" path="res://src/stand/PrepStation.tscn" id="3_prepstation"]
+[ext_resource type="PackedScene" path="res://assets/kenney/furniture/table.glb" id="ken_table"]
+[ext_resource type="PackedScene" path="res://assets/kenney/furniture/chair.glb" id="ken_chair"]
+[ext_resource type="PackedScene" path="res://assets/kenney/furniture/bench.glb" id="ken_bench"]
+[ext_resource type="PackedScene" path="res://assets/kenney/furniture/computerScreen.glb" id="ken_register"]
+
+[sub_resource type="BoxShape3D" id="2_counter_shape"]
+size = Vector3(2.36, 0.92, 1.25)
+
+[sub_resource type="BoxMesh" id="9_bag_shell_mesh"]
+size = Vector3(0.24, 0.3, 0.18)
+
+[sub_resource type="BoxMesh" id="10_bag_liquid_mesh"]
+size = Vector3(0.2, 0.24, 0.14)
+
+[sub_resource type="CylinderMesh" id="11_bag_straw_mesh"]
+top_radius = 0.012
+bottom_radius = 0.012
+height = 0.34
+radial_segments = 8
+rings = 1
+
+[node name="Stand" type="Node3D"]
+script = ExtResource("1_stand")
+
+[node name="Counter" type="StaticBody3D" parent="."]
+groups = ["stand"]
+
+[node name="CounterMesh" parent="Counter" instance=ExtResource("ken_table")]
+position = Vector3(-1.177, 0, 0.626)
+scale = Vector3(2.8, 2.8, 2.8)
+
+[node name="CounterShape" type="CollisionShape3D" parent="Counter"]
+shape = SubResource("2_counter_shape")
+position = Vector3(0, 0.46, 0)
+
+[node name="StandEquipment" type="Node" parent="."]
+script = ExtResource("2_equipment")
+
+[node name="PrepStation" parent="." instance=ExtResource("3_prepstation")]
+position = Vector3(-0.6, 0.92, 0)
+
+[node name="CashRegister" parent="." instance=ExtResource("ken_register")]
+position = Vector3(0.85, 0.92, 0.05)
+rotation = Vector3(0, 3.14159, 0)
+scale = Vector3(1.2, 1.2, 1.2)
+
+[node name="Seats" type="Node3D" parent="."]
+
+; CATATAN: chair.glb punya AABB x=[0..0.2] (bukan simetris), jadi yaw 180°
+; membalik sumbu X. Posisi di bawah sudah dikoreksi supaya kursi tetap
+; TEPAT di atas marker kursi (tempat pelanggan berdiri).
+[node name="Chair_1" parent="Seats" instance=ExtResource("ken_chair")]
+position = Vector3(-1.0, 0, 1.78)
+rotation = Vector3(0, 3.14159, 0)
+scale = Vector3(1.5, 1.5, 1.5)
+
+[node name="Chair_2" parent="Seats" instance=ExtResource("ken_chair")]
+position = Vector3(0.15, 0, 1.78)
+rotation = Vector3(0, 3.14159, 0)
+scale = Vector3(1.5, 1.5, 1.5)
+
+[node name="Chair_3" parent="Seats" instance=ExtResource("ken_chair")]
+position = Vector3(1.3, 0, 1.78)
+rotation = Vector3(0, 3.14159, 0)
+scale = Vector3(1.5, 1.5, 1.5)
+
+[node name="Queue" type="Node3D" parent="."]
+
+; Bench untuk area antrean: diputar 180° supaya sandarannya di sisi
+; belakang (arah +Z) sehingga orang menghadap ke arah konter.
+[node name="Bench_1" parent="Queue" instance=ExtResource("ken_bench")]
+position = Vector3(2.9, 0, 0.9)
+rotation = Vector3(0, 3.14159, 0)
+scale = Vector3(1.5, 1.5, 1.5)
+
+[node name="Bench_2" parent="Queue" instance=ExtResource("ken_bench")]
+position = Vector3(2.9, 0, 1.7)
+rotation = Vector3(0, 3.14159, 0)
+scale = Vector3(1.5, 1.5, 1.5)
+
+[node name="Bench_3" parent="Queue" instance=ExtResource("ken_bench")]
+position = Vector3(2.9, 0, 2.5)
+rotation = Vector3(0, 3.14159, 0)
+scale = Vector3(1.5, 1.5, 1.5)
+
+[node name="Bench_4" parent="Queue" instance=ExtResource("ken_bench")]
+position = Vector3(2.9, 0, 3.3)
+rotation = Vector3(0, 3.14159, 0)
+scale = Vector3(1.5, 1.5, 1.5)
+
+[node name="Bench_5" parent="Queue" instance=ExtResource("ken_bench")]
+position = Vector3(2.9, 0, 4.1)
+rotation = Vector3(0, 3.14159, 0)
+scale = Vector3(1.5, 1.5, 1.5)
+
+[node name="BagVisual" type="Node3D" parent="."]
+position = Vector3(0, 1.07, 0.15)
+visible = false
+
+[node name="Shell" parent="BagVisual" type="MeshInstance3D"]
+mesh = SubResource("9_bag_shell_mesh")
+
+[node name="Liquid" parent="BagVisual" type="MeshInstance3D"]
+mesh = SubResource("10_bag_liquid_mesh")
+position = Vector3(0, -0.03, 0)
+
+[node name="Straw" parent="BagVisual" type="MeshInstance3D"]
+mesh = SubResource("11_bag_straw_mesh")
+position = Vector3(0.04, 0.22, 0)
+rotation = Vector3(0, 0, -0.35)
+visible = false

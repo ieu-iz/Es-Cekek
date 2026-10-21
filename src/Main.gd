@@ -8,26 +8,6 @@
 #   - Load the first location, start the day loop, wire the day cycle
 extends Node3D
 
-const LOCATION_PATHS: Array[String] = [
-	"res://data/locations/pasar.tres",
-	"res://data/locations/sekolah.tres",
-	"res://data/locations/rumah.tres",
-]
-
-const BRAND_PATHS: Array[String] = [
-	"res://data/brands/tejus.tres",
-	"res://data/brands/marimas.tres",
-	"res://data/brands/jasjus.tres",
-	"res://data/brands/frenta.tres",
-]
-
-const TOOL_PATHS: Array[String] = [
-	"res://data/tools/table.tres",
-	"res://data/tools/sachet_hook.tres",
-	"res://data/tools/water_dispenser.tres",
-	"res://data/tools/ice_cooler_small.tres",
-]
-
 ## Starting capital. Plan §Economy: player begins with enough to buy stock.
 const STARTING_MONEY: float = 50000.0
 ## Sachets of every brand the player starts with.
@@ -37,60 +17,58 @@ const STARTING_ICE: int = 40
 
 @onready var world_root: Node3D = $WorldRoot
 @onready var player: CharacterBody3D = $Player
+## Matahari persisten (grup "sun") — milik Main, bukan tiap lokasi.
+@onready var sun: DirectionalLight3D = $Sun
+## Lingkungan dunia persisten (langit + ambient + kabut).
+@onready var world_environment: WorldEnvironment = $WorldEnvironment
 
-var location_defs: Array[LocationDef] = []
-var brands: Array[SachetBrand] = []
-var tools: Array[Tool] = []
+## The data catalog lives in the Catalog autoload (res://src/autoload/Catalog.gd).
+var location_defs: Array[LocationDef]:
+	get:
+		return Catalog.locations
+
+var brands: Array[SachetBrand]:
+	get:
+		return Catalog.brands
+
+var tools: Array[Tool]:
+	get:
+		return Catalog.tools
 
 
 func _ready() -> void:
 	world_root.add_to_group("world_root")
 
-	_load_catalog()
+	if Catalog.locations.is_empty():
+		Catalog.load_catalog()
 	if location_defs.is_empty():
 		push_error("Main: tidak ada LocationDef yang termuat — game tidak bisa jalan.")
 		return
 
 	LocationManager.set_locations(location_defs)
 	UILayer.set_locations(location_defs)
+	UILayer.refresh_prep_brands()
 	_setup_inventory()
 	_wire_signals()
+
+	# Serahkan matahari + lingkungan dunia ke TimeOfDay supaya siklus
+	# siang/malam benar-benar mengubah pencahayaan.
+	TimeOfDay.sun_light = sun
+	TimeOfDay.environment = world_environment
 
 	# First location = Pasar (busiest). Plan Task 4.
 	LocationManager.load_location(world_root, location_defs[0])
 	TimeOfDay.start_day(Economy.current_day)
 	UILayer.update_hud(Inventory.money, Economy.current_day, 0.0)
-	UILayer.show_order("Tejus")
 
 
-# --- Catalog ------------------------------------------------------------
-
-func _load_catalog() -> void:
-	for path in LOCATION_PATHS:
-		var def := ResourceLoader.load(path) as LocationDef
-		if def == null:
-			push_error("Main: gagal memuat %s" % path)
-		else:
-			location_defs.append(def)
-
-	for path in BRAND_PATHS:
-		var brand := ResourceLoader.load(path) as SachetBrand
-		if brand == null:
-			push_error("Main: gagal memuat %s" % path)
-		else:
-			brands.append(brand)
-
-	for path in TOOL_PATHS:
-		var tool := ResourceLoader.load(path) as Tool
-		if tool == null:
-			push_error("Main: gagal memuat %s" % path)
-		else:
-			tools.append(tool)
-
+# --- Inventory setup ---------------------------------------------------
 
 func _setup_inventory() -> void:
-	# Startup tools: table, sachet_hook, water_dispenser, ice_cooler_small.
-	Inventory.grant_startup(tools)
+	# Startup tools only: table, sachet_hook, water_dispenser, ice_cooler_small.
+	# Shop tools (ice_cooler_large, mixer) are bought from the shop during the
+	# day — they cost money and unlock by day.
+	Inventory.grant_startup(Catalog.startup_tools())
 	Inventory.money = STARTING_MONEY
 	Inventory.add_ice(STARTING_ICE)
 	for brand in brands:
@@ -104,9 +82,11 @@ func _wire_signals() -> void:
 	Economy.day_started.connect(_on_day_started)
 	Economy.day_completed.connect(_on_day_completed)
 	Inventory.money_changed.connect(_on_money_changed)
+	Inventory.tools_changed.connect(_on_tools_changed)
 	UILayer.travel_requested.connect(_on_travel_requested)
 	UILayer.day_end_continue.connect(_on_day_end_continue)
 	UILayer.interact_pressed.connect(_on_interact_pressed)
+	UILayer.shop_action.connect(_on_shop_action)
 
 
 func _on_day_ended(_day: int) -> void:
@@ -115,9 +95,11 @@ func _on_day_ended(_day: int) -> void:
 
 func _on_day_started(day: int) -> void:
 	TimeOfDay.start_day(day)
-	# Restock ice for the new day (sachets are bought with money in Task 5 UI).
+	# Restock ice for the new day (sachets are bought with money).
 	Inventory.add_ice(STARTING_ICE)
 	UILayer.update_hud(Inventory.money, day, 0.0)
+	# New shop stock may have unlocked overnight.
+	UILayer.refresh_shop()
 
 
 func _on_day_completed(recap: Dictionary) -> void:
@@ -128,6 +110,21 @@ func _on_day_completed(recap: Dictionary) -> void:
 
 func _on_money_changed(new_money: float) -> void:
 	UILayer.update_hud(new_money, Economy.current_day, TimeOfDay.elapsed_seconds())
+	# The shop buttons grey out when the money runs short.
+	UILayer.refresh_shop()
+
+
+func _on_tools_changed() -> void:
+	# A tool was bought or replaced — refresh the shop so the buttons update.
+	UILayer.refresh_shop()
+
+
+## Handle a shop panel action (Task 8).
+func _on_shop_action(action: StringName, value: float) -> void:
+	if action == UILayer.SHOP_ACTION_BUY_TOOL:
+		UILayer.buy_tool_at(int(value))
+	elif action == UILayer.SHOP_ACTION_CLOSE:
+		UILayer.close_shop()
 
 
 func _on_travel_requested(location_id: StringName) -> void:
@@ -135,7 +132,10 @@ func _on_travel_requested(location_id: StringName) -> void:
 
 
 func _on_interact_pressed() -> void:
-	pass
+	# The on-screen INTERAK button. The Player owns the interaction logic.
+	for p in get_tree().get_nodes_in_group("player"):
+		if p.has_method("_interact"):
+			p.call("_interact")
 
 
 func _on_day_end_continue() -> void:

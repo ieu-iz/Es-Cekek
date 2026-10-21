@@ -8,6 +8,7 @@ extends Resource
 @export var ice_amount: int = 0           # spoon count, 0..MAX_SPOON_ICE
 @export var prep_quality: int = 0         # 0..100, correctness x tier x tool
 @export var sell_price: float = 0.0       # set by player; must be >= cost
+@export var has_straw: bool = false       # ada sedotan? (dipakai visual 3D)
 
 const MAX_SPOON_ICE: int = 8               # Tuning table (Plan)
 const ICE_COST_PER_SPOON: float = 0.2     # Tuning table

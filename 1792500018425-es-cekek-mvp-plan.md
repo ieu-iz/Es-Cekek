@@ -26,6 +26,14 @@ A 3D simulation built in **Godot 4.x** (GDScript, single `.pck`). Run an "es di 
 - Audio: Kenney "Audio" (SFX: scoop/pour/stir; footsteps; complain "oof"/"ah" vocals; music loops).
 - Import via `.import`; textures ≤512 for props, ≤1024 env, compressed (ETC2 Android, VRAM desktop).
 
+> **HASIL SEBENARNYA (Task 12c–12f)** — semua aset di atas **sudah diambil** dari pack resmi Kenney
+> dan dipakai di game: **Mini Characters** (12 karakter), **City Kit Commercial** (gedung toko),
+> **City Kit Suburban** (rumah, pohon, pagar), **City Kit Roads** (aspal/marka jalan),
+> **Furniture Kit** (meja, kursi, bangku, lemari, monitor), **Food Kit** (makanan, minuman, perabot).
+> Total **197 GLB, 10,6 MB** di `assets/kenney/`, semuanya **CC0** dan satu gaya low-poly konsisten.
+> Audio **tidak** memakai file eksternal — bunyi disintesis runtime (Task 12b).
+> Pipeline unduh + subset: `scripts/prepare_kenney_assets.ps1`.
+
 ## Architecture (scenes + nodes)
 
 ```
@@ -120,18 +128,18 @@ Combined score reflects real stand quality:
 
 ## Tasks (ordered)
 
-- [ ] 1. Install Godot 4.x + Android templates. `git init`. Create `project.godot` (3D, Mobile renderer, GLES3), InputMap (`move_*`, `interact`, `pour`, `add_water`, `stir`, `add_ice`, `add_straw`, `serve`, `travel`, `ui_accept`), touch→mouse emulate, folder layout `assets/ src/ data/ locations/`.
-- [ ] 2. Import CC0 assets. Build `Location.tscn` template: ground + baked directional light + simple NavMesh + one Stand slot placeholder.
-- [ ] 3. Build `Player.tscn`: CharacterBody3D + ROAM/AT_STAND state machine, virtual joystick (Android) + WASD, tap-to-interact, camera follow.
-- [ ] 4. Build `LocationManager` singleton + **Pasar** location scene: spawn Player + Stand + walkable ground, NavMesh movement, travel/loading UI.
-- [ ] 5. Build `SachetBrand` resource + 4 brand `.tres` (assign price_tier 1000/2000/5000 + `base_quality`). Build `Tool` resource + startup `Tool` set (table, sachet_hook, water_dispenser, ice_cooler_small). Build `StandEquipment` node + `Inventory` singleton (money, sachet stock, ice stock, owned_tools). Implement consume-on-build rule.
-- [ ] 6. Build `Stand.tscn` (counter, `StandEquipment` with 4 startup tools, ice cooler, cash register, seats + queue) + `PrepStation.tscn`: brand-matched rack, pour/add_water/stir/add_ice/add_straw pipeline using `StandEquipment.ice_capacity`/`quality_mod` → emits `Bag` with `prep_quality` = `base_quality × step_score × tool_mod`. Verify tier differences are visible + refuse/serve path.
-- [ ] 7. Build `Customer` scene + spawner: NavMesh walk to Stand, `order` + `price_tolerance`, annoyance timer + tier complain lines (audio), seat/queue logic, serve evaluation (satisfaction/tip/refuse), pay `Inventory`.
-- [ ] 8. Build `Economy` + `TimeOfDay` singletons: 3-min day, rent per Location, end-of-day recap (profit per location, best brand), next-day unlock.
-- [ ] 9. Build `UILayer`: money + day/time HUD, order callout + complain line display, price +/- (touch) or slider (desktop), loading screen, day-end summary. Anchor + touch-target pass.
-- [ ] 10. Add **Sekolah** + **Rumah** locations (`LocationDef` with distinct rent/foot_traffic/annoyance_rate); wire LoadLocation travel; confirm Player/Inventory/Economy/TimeOfDay persist.
-- [ ] 11. **Android QA**: export APK, install, verify move joystick + prep taps + serve + UI on ~1080×2340 and ~2560×1600. Per + day-night lighting. APK size check. Windows exe sanity test.
-- [ ] 12. Polish: confirm SFX + complain vocal lines + music loop, basic VFX (pour/stir/ice clink), location-distinct colors. Ship `EsCekek_MVP_v1`.
+- [x] 1. Install Godot 4.x + Android templates. `git init`. Create `project.godot` (3D, Mobile renderer, GLES3), InputMap (`move_*`, `interact`, `pour`, `add_water`, `stir`, `add_ice`, `add_straw`, `serve`, `travel`, `ui_accept`), touch→mouse emulate, folder layout `assets/ src/ data/ locations/`. *(Export template 4.7.2 sudah terpasang.)*
+- [x] 2. *(DONE — Task 12c–12f)* Import CC0 assets: **197 GLB Kenney** di `assets/kenney/` (karakter, gedung, rumah/pohon, jalan, perabot, makanan) + `Textures/colormap.png`. Build `Location.tscn` template: ground + baked directional light + simple NavMesh + one Stand slot placeholder.
+- [x] 3. Build `Player.tscn`: CharacterBody3D + ROAM/AT_STAND state machine, virtual joystick (Android) + WASD, tap-to-interact, camera follow.
+- [x] 4. Build `LocationManager` singleton + **Pasar** location scene: spawn Player + Stand + walkable ground, NavMesh movement, travel/loading UI.
+- [x] 5. Build `SachetBrand` resource + 4 brand `.tres` (assign price_tier 1000/2000/5000 + `base_quality`). Build `Tool` resource + startup `Tool` set (table, sachet_hook, water_dispenser, ice_cooler_small). Build `StandEquipment` node + `Inventory` singleton (money, sachet stock, ice stock, owned_tools). Implement consume-on-build rule.
+- [x] 6. Build `Stand.tscn` (counter, `StandEquipment` with 4 startup tools, ice cooler, cash register, seats + queue) + `PrepStation.tscn`: brand-matched rack, pour/add_water/stir/add_ice/add_straw pipeline using `StandEquipment.ice_capacity`/`quality_mod` → emits `Bag` with `prep_quality` = `base_quality × step_score × tool_mod`. Verify tier differences are visible + refuse/serve path.
+- [x] 7. Build `Customer` scene + spawner: NavMesh walk to Stand, `order` + `price_tolerance`, annoyance timer + tier complain lines (audio), seat/queue logic, serve evaluation (satisfaction/tip/refuse), pay `Inventory`.
+- [x] 8. Build `Economy` + `TimeOfDay` singletons: 3-min day, rent per Location, end-of-day recap (profit per location, best brand), next-day unlock.
+- [x] 9. Build `UILayer`: money + day/time HUD, order callout + complain line display, price +/- (touch) or slider (desktop), loading screen, day-end summary. Anchor + touch-target pass.
+- [x] 10. Add **Sekolah** + **Rumah** locations (`LocationDef` with distinct rent/foot_traffic/annoyance_rate); wire LoadLocation travel; confirm Player/Inventory/Economy/TimeOfDay persist.
+- [ ] 11. *(PARTIAL: preset + export template + build Windows/Linux/macOS/Android + re-export dengan asset Kenney selesai; hanya QA di perangkat asli yang belum)* **Android QA**: export APK, install, verify move joystick + prep taps + serve + UI on ~1080×2340 and ~2560×1600. Per + day-night lighting. APK size check. Windows exe sanity test. *(APK `build/android/EsCekek.apk` **89,8 MB, signed** — WAJIB diekspor dengan `--export-debug`, `--export-release` gagal signing; `com.escekek.game`, minSdk 24, targetSdk 36; `adb devices` kosong → belum ada perangkat untuk QA.)*
+- [ ] 12. *(PARTIAL: SFX + musik ambient + build 4 platform + art 3D Kenney selesai; voice keluhan, VFX, warna lokasi belum)* Polish: confirm SFX + complain vocal lines + music loop, basic VFX (pour/stir/ice clink), location-distinct colors. Ship `EsCekek_MVP_v1`.
 
 ## Validation Plan
 - **Functional**: travel all 3 locations without crash; one seat at each; 5 full days no soft-lock; buy all 4 brands.

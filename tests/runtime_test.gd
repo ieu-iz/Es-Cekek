@@ -1,5 +1,5 @@
-## runtime_test.gd
-# Headless runtime smoke test for the vertical slice (Tasks 1-4).
+﻿## runtime_test.gd
+# Headless runtime smoke test for the whole MVP loop (Tasks 1-7).
 #
 # Run with:
 #   godot --headless --path . --script res://tests/runtime_test.gd
@@ -11,12 +11,18 @@
 #   4. Traveling to Sekolah and Rumah swaps the location scene.
 #   5. The HUD reflects money / day.
 #   6. A full day cycle fires (day_ended -> Economy.end_day -> recap).
+#   7. Task 5: Catalog / StandEquipment / Inventory consume-on-build.
+#   8. Task 6: the prep pipeline produces a Bag with the right prep_quality.
+#   9. Task 7: customers spawn, complain, and are served / refused.
 #
 # Exits with code 0 when everything passes, 1 otherwise.
 
-extends SceneTree
+extends Node
 
 const MAIN_SCENE := "res://src/Main.tscn"
+## Dimuat lewat path (bukan `class_name`) supaya test tidak bergantung pada
+## global class cache yang bisa saja basi di folder .godot.
+const PLAYER_SCRIPT := preload("res://src/entities/Player.gd")
 
 var _failures: int = 0
 var _checks: int = 0
@@ -31,7 +37,7 @@ func _check(label: String, condition: bool, detail: String = "") -> void:
 		print("  [FAIL] %s %s" % [label, detail])
 
 
-func _initialize() -> void:
+func _ready() -> void:
 	# Run the whole thing on the next idle frame so the scene tree is live.
 	call_deferred("_run")
 
@@ -46,18 +52,18 @@ func _run() -> void:
 		_finish()
 		return
 	var main := packed.instantiate() as Node3D
-	root.add_child(main)
-	await process_frame
-	await process_frame
+	get_tree().root.add_child(main)
+	await get_tree().process_frame
+	await get_tree().process_frame
 
 	# --- 1. Player ----------------------------------------------------
-	var players := get_nodes_in_group("player")
+	var players := get_tree().get_nodes_in_group("player")
 	_check("Player ada di grup 'player'", players.size() == 1, "(dapat %d)" % players.size())
-	var player := players[0] as Node3D if players.size() > 0 else null
+	var player: Node3D = players[0] if players.size() > 0 else null
 	_check("Player adalah CharacterBody3D", player is CharacterBody3D)
 
 	# --- 2. First location loaded -------------------------------------
-	var loc_mgr := root.get_node_or_null("LocationManager")
+	var loc_mgr := get_tree().root.get_node_or_null("LocationManager")
 	_check("Autoload LocationManager ada", loc_mgr != null)
 	var current: LocationDef = null
 	if loc_mgr != null:
@@ -81,25 +87,30 @@ func _run() -> void:
 	# --- 4. Travel between locations ----------------------------------
 	for target in [&"sekolah", &"rumah"]:
 		loc_mgr.travel_to(target)
-		await process_frame
-		await process_frame
+		await get_tree().process_frame
+		await get_tree().process_frame
 		var now: LocationDef = loc_mgr.get("current_location") as LocationDef
 		_check("Travel ke %s berhasil" % target, now != null and now.id == target,
 			"(dapat %s)" % (now.id if now != null else "null"))
 		var mounted: Node3D = loc_mgr.get("current_root") as Node3D
 		_check("Scene %s ter-mount" % target, mounted != null)
+		loc_root = mounted
 
 	# --- 5. Inventory / HUD -------------------------------------------
-	var inv := root.get_node_or_null("Inventory")
+	var inv := get_tree().root.get_node_or_null("Inventory")
 	_check("Autoload Inventory ada", inv != null)
 	if inv != null:
 		_check("Saldo awal > 0", inv.get("money") > 0.0, "(uang %.0f)" % inv.get("money"))
+		_check("Inventory itu node autoload", inv.name == "Inventory")
 		_check("Stok sachet terisi", not (inv.get("sachet_stock") as Dictionary).is_empty())
 		_check("Es terisi", inv.get("ice_stock") > 0)
 		_check("Startup tools terpasang", (inv.get("owned_tools") as Array).size() == 4,
 			"(dapat %d)" % (inv.get("owned_tools") as Array).size())
+		_check("Upgrade toko TIDAK diberikan gratis",
+			not (inv.get("owned_tools") as Array).any(func(t): return (t as Tool).id == &"ice_cooler_large"),
+			"(harus dibeli di toko)")
 
-	var ui := root.get_node_or_null("UILayer")
+	var ui := get_tree().root.get_node_or_null("UILayer")
 	_check("Autoload UILayer ada", ui != null)
 	if ui != null:
 		_check("UILayer memuat scene UI", ui.get("_ui_root") != null)
@@ -113,29 +124,1091 @@ func _run() -> void:
 	# --- 7. Player movement reacts to input ----------------------------
 	if player != null:
 		var before: Vector3 = player.global_position
-		# Simulate a walk by injecting a movement direction for a few frames.
 		player.set_physics_process(true)
+		# Simulate a walk by injecting a movement direction for a few frames.
 		for i in range(30):
 			Input.action_press("move_forward")
-			await physics_frame
+			await get_tree().physics_frame
 		Input.action_release("move_forward")
 		var after: Vector3 = player.global_position
 		_check("Player bergerak saat input diberikan",
 			before.distance_to(after) > 0.05,
 			"(perpindahan %.3f)" % before.distance_to(after))
 
-	# --- 8. Day cycle --------------------------------------------------
-	var tod := root.get_node_or_null("TimeOfDay")
+	# --- 8. Task 5: catalog, stand equipment, consume-on-build --------
+	await _test_task5(loc_root)
+
+	# --- 9. Task 6: the prep pipeline ---------------------------------
+	await _test_task6(loc_root)
+
+	# --- 10. Task 7: customers, annoyance, serve / refuse --------------
+	await _test_task7(loc_root)
+
+	# --- 11. Task 8: tool slots, shop, per-location rent ---------------
+	await _test_task8(loc_root)
+
+	# --- 12. Task 9: UILayer polish (order queue, price slider, recap) -
+	await _test_task9(loc_root)
+
+	# --- 13. Task 4: TimeOfDay drives the real day/night lighting ------
+	await _test_timeofday_lighting()
+
+	# --- 14. Task 12: 3D feedback (bag mesh, bubble, annoyance pose) ---
+	await _test_task12_feedback(loc_root)
+
+	# --- 15. Task 12: procedural SFX autoload ----------------------------
+	await _test_task12_sfx(loc_root)
+
+	# --- 16. Task 11: virtual joystick publishes movement --------------
+	await _test_virtual_joystick()
+
+	# --- 17. Arah gerak: W harus maju, S mundur (regresi build .exe) ----
+	await _test_movement_direction()
+
+	# --- 17. Day cycle -------------------------------------------------
+	var tod := get_tree().root.get_node_or_null("TimeOfDay")
 	_check("Autoload TimeOfDay ada", tod != null)
 	if tod != null:
 		tod.end_day_manual()
-		await process_frame
-		await process_frame
-		var econ := root.get_node_or_null("Economy")
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var econ := get_tree().root.get_node_or_null("Economy")
 		_check("Hari bertambah setelah day end", econ != null and econ.get("current_day") == 2,
 			"(hari %s)" % (econ.get("current_day") if econ != null else "?"))
+		# The daily tallies are reset when the day ends, so the recap is the
+		# authoritative record of what happened.
+		var recap: Dictionary = econ.get("last_recap") if econ != null else {}
+		_check("Penjualan tercatat di rekap", int(recap.get("sales", 0)) >= 1,
+			"(penjualan %s)" % str(recap.get("sales", 0)))
+		_check("Rekap punya omzet", float(recap.get("revenue", 0.0)) > 0.0,
+			"(omzet %s)" % str(recap.get("revenue", 0.0)))
+		_check("Rekap punya brand terbaik", str(recap.get("best_brand", "")) != "",
+			"(brand %s)" % str(recap.get("best_brand", "")))
 
 	_finish()
+
+
+# --- Task 5 -------------------------------------------------------------
+
+func _test_task5(loc_root: Node3D) -> void:
+	# NOTE: in --script mode the autoload *values* (Catalog, Inventory, ...) are
+	# not registered as global identifiers at compile time, so we fetch them as
+	# typed nodes from the scene tree root instead.
+	var catalog: Catalog = get_tree().root.get_node_or_null("Catalog")
+	_check("Autoload Catalog ada", catalog != null)
+	if catalog == null:
+		return
+	_check("Catalog punya 3 lokasi", (catalog.get("locations") as Array).size() == 3)
+	_check("Catalog punya 4 brand", (catalog.get("brands") as Array).size() == 4)
+	_check("Catalog punya 6 tool (4 startup + 2 toko)", (catalog.get("tools") as Array).size() == 6)
+	_check("Catalog punya 4 startup tool", catalog.startup_tools().size() == 4,
+		"(dapat %d)" % catalog.startup_tools().size())
+	_check("Catalog punya 2 tool toko", catalog.shop_tools().size() == 2,
+		"(dapat %d)" % catalog.shop_tools().size())
+
+	var stand := _find_stand(loc_root)
+	_check("Stand ter-mount di lokasi", stand != null)
+	if stand == null:
+		return
+
+	var equip := stand.equipment
+	_check("StandEquipment punya 4 tool", equip.tools.size() == 4,
+		"(dapat %d)" % equip.tools.size())
+	_check("Kapasitas es = 8 sendok", equip.ice_capacity() == 8,
+		"(dapat %d)" % equip.ice_capacity())
+	_check("Quality mod = 1.0", is_equal_approx(equip.quality_mod(), 1.0),
+		"(dapat %.2f)" % equip.quality_mod())
+	_check("StandEquipment punya slot cooler kecil",
+		equip.tool_in_slot(&"cooler") != null
+		and equip.tool_in_slot(&"cooler").id == &"ice_cooler_small")
+	_check("StandEquipment punya ice_cooler_small", equip.has_tool(&"ice_cooler_small"))
+	_check("Rack prep punya 4 brand", stand.prep_station.rack.size() == 4,
+		"(dapat %d)" % stand.prep_station.rack.size())
+
+	# REGRESI: node CounterShape pernah ditulis tanpa atribut `type=`, jadi
+	# Godot menjadikannya StaticBody3D (tipe warisan dari parent) dan
+	# assignment `shape` gagal diam-diam. Akibatnya Counter tidak punya
+	# collision shape sama sekali, sehingga InteractArea pemain tidak pernah
+	# mendeteksi stand -> panel prep tidak bisa dibuka saat main.
+	var counter := stand.get_node_or_null("Counter") as StaticBody3D
+	_check("Counter adalah StaticBody3D", counter != null)
+	var counter_shape: CollisionShape3D = null
+	if counter != null:
+		for child in counter.get_children():
+			if child is CollisionShape3D:
+				counter_shape = child as CollisionShape3D
+				break
+	_check("Counter punya collision shape yang valid",
+		counter_shape != null and counter_shape.shape != null)
+
+	# Marker kursi + antrean menentukan batas spawn (Implementer Decision #3).
+	_check("Stand punya 3 kursi", stand.seat_positions().size() == 3,
+		"(dapat %d)" % stand.seat_positions().size())
+	_check("Stand punya 5 slot antrean", stand.queue_positions().size() == 5,
+		"(dapat %d)" % stand.queue_positions().size())
+
+	# Propsi stand harus mesh Kenney sungguhan, bukan box primitif dulu.
+	_check("Meja stand memakai mesh Kenney",
+		_has_mesh(stand.get_node_or_null("Counter/CounterMesh")))
+	_check("Kursi stand memakai mesh Kenney",
+		_has_mesh(stand.get_node_or_null("Seats/Chair_1")))
+	_check("Prodi prep memakai mesh Kenney",
+		_has_mesh(stand.get_node_or_null("PrepStation/IceCooler")))
+
+	# Consume-on-build must be atomic: probing never eats stock.
+	var inv: Inventory = get_tree().root.get_node_or_null("Inventory")
+	var tejus: SachetBrand = catalog.brand_by_id(&"tejus")
+	_check("Catalog menemukan brand tejus", tejus != null)
+	if tejus == null or inv == null:
+		return
+
+	var sachets_before: int = inv.sachet_stock.get(tejus.id, 0) as int
+	var ice_before: int = inv.ice_stock
+	_check("can_make_bag tidak mengonsumsi stok",
+		inv.can_make_bag(tejus.id, 2)
+		and (inv.sachet_stock.get(tejus.id, 0) as int) == sachets_before
+		and inv.ice_stock == ice_before)
+
+	# A failed build (not enough ice) must not eat the sachet.
+	inv.ice_stock = 0
+	var ok: bool = inv.try_consume(tejus.id, 2)
+	_check("try_consume gagal saat es habis", not ok)
+	_check("Sachet tidak terpakai saat gagal",
+		(inv.sachet_stock.get(tejus.id, 0) as int) == sachets_before,
+		"(dapat %d, harusnya %d)" % [(inv.sachet_stock.get(tejus.id, 0) as int), sachets_before])
+	inv.ice_stock = ice_before
+
+	# Restock with money.
+	var money_before: float = inv.money
+	var bought: int = inv.restock_sachets(tejus, 3)
+	_check("Restock sachet menambah stok", bought == 3
+		and (inv.sachet_stock.get(tejus.id, 0) as int) == sachets_before + 3,
+		"(dapat %d)" % bought)
+	_check("Restock mengurangi uang", inv.money < money_before)
+
+
+# --- Task 6 -------------------------------------------------------------
+
+func _test_task6(loc_root: Node3D) -> void:
+	var stand := _find_stand(loc_root)
+	if stand == null:
+		_fail("Stand tidak ada — Task 6 dilewati.")
+		return
+	var prep := stand.prep_station
+	var catalog: Catalog = get_tree().root.get_node_or_null("Catalog")
+	if catalog == null:
+		return
+
+	var low_brand: SachetBrand = catalog.brand_by_id(&"tejus")
+	var high_brand: SachetBrand = catalog.brand_by_id(&"frenta")
+	if low_brand == null or high_brand == null:
+		_fail("Brand tidak ditemukan — Task 6 dilewati.")
+		return
+
+	var inv: Inventory = get_tree().root.get_node_or_null("Inventory")
+
+	# --- Perfect bag of the cheap tier ---
+	prep.open_build()
+	prep.select_brand(low_brand)
+	prep.pour(1.0)
+	prep.add_water()
+	prep.stir()
+	prep.add_ice(4)
+	prep.add_straw()
+	_check("step_score = 1.0 untuk langkah sempurna", is_equal_approx(prep.step_score(), 1.0),
+		"(dapat %.2f)" % prep.step_score())
+
+	var sachets_before: int = inv.sachet_stock.get(low_brand.id, 0) as int
+	var ice_before: int = inv.ice_stock
+	var bag := prep.build_bag()
+	_check("Bag berhasil dibuat", bag != null)
+	if bag == null:
+		return
+	_check("prep_quality tier 1k = 35", bag.prep_quality == 35, "(dapat %d)" % bag.prep_quality)
+	_check("Sachet dikonsumsi saat build",
+		(inv.sachet_stock.get(low_brand.id, 0) as int) == sachets_before - 1,
+		"(dapat %d)" % (inv.sachet_stock.get(low_brand.id, 0) as int))
+	_check("Es dikonsumsi saat build", inv.ice_stock == ice_before - 4,
+		"(dapat %d)" % inv.ice_stock)
+	_check("Volume saclet 1.0", bag.portions[0].volume == 1.0)
+	_check("Brand di bag benar", bag.primary_brand() == low_brand)
+	_check("Harga awal = recommended", is_equal_approx(bag.sell_price, bag.recommended_price()))
+	_check("Cost = volume x base_cost + es", is_equal_approx(bag.cost(),
+		low_brand.base_cost + 4 * Bag.ICE_COST_PER_SPOON),
+		"(dapat %.2f)" % bag.cost())
+
+	# --- Perfect bag of the premium tier: visibly richer ---
+	prep.open_build()
+	prep.select_brand(high_brand)
+	prep.pour(1.0)
+	prep.add_water()
+	prep.stir()
+	prep.add_ice(4)
+	prep.add_straw()
+	var bag2 := prep.build_bag()
+	_check("prep_quality tier 5k = 85", bag2 != null and bag2.prep_quality == 85,
+		"(dapat %d)" % (bag2.prep_quality if bag2 != null else -1))
+	_check("Tier 5k lebih tinggi dari 1k",
+		bag2 != null and bag2.prep_quality > bag.prep_quality)
+
+	# --- A sloppy bag scores much lower ---
+	prep.open_build()
+	prep.select_brand(high_brand)
+	prep.pour(0.3)
+	prep.add_ice(1)
+	var bag3 := prep.build_bag()
+	_check("Proses asal-asalan punya kualitas rendah",
+		bag3 != null and bag3.prep_quality < 20,
+		"(dapat %d)" % (bag3.prep_quality if bag3 != null else -1))
+	_check("Volume < 0.5 menurunkan step_score", prep.step_score() < 0.5,
+		"(dapat %.2f)" % prep.step_score())
+
+	# --- Ice is capped by the stand's ice capacity ---
+	prep.open_build()
+	prep.select_brand(low_brand)
+	prep.add_ice(99)
+	_check("Es dibatasi kapasitas cooler (8)", prep.ice_amount == 8,
+		"(dapat %d)" % prep.ice_amount)
+
+	# --- The prep panel can be opened and closed ---
+	stand.current_bag = null
+	stand.interact_at_stand()
+	var ui_layer := get_tree().root.get_node_or_null("UILayer") as UILayer
+	_check("Prep panel terbuka saat interact", ui_layer != null and ui_layer.is_prep_panel_open())
+	stand.close_prep()
+	_check("Prep panel tertutup setelah Batal", ui_layer != null and not ui_layer.is_prep_panel_open())
+
+
+# --- Task 7 -------------------------------------------------------------
+
+func _test_task7(loc_root: Node3D) -> void:
+	var stand := _find_stand(loc_root)
+	if stand == null:
+		_fail("Stand tidak ada — Task 7 dilewati.")
+		return
+	var spawner := stand.spawner
+	_check("Stand terhubung ke CustomerSpawner", spawner != null)
+	if spawner == null:
+		return
+
+	var prep := stand.prep_station
+	var inv: Inventory = get_tree().root.get_node_or_null("Inventory")
+	var catalog: Catalog = get_tree().root.get_node_or_null("Catalog")
+
+	# --- Spawning ---
+	var spawned := spawner.try_spawn()
+	_check("Customer berhasil spawn", spawned)
+	_check("Spawner melacak 1 customer", spawner.customers.size() == 1,
+		"(dapat %d)" % spawner.customers.size())
+	if spawner.customers.is_empty():
+		_fail("Tidak ada customer untuk diuji.")
+		return
+
+	var customer := spawner.customers[0] as Customer
+	_check("Customer punya pesanan", customer.order_brand != null)
+	_check("Customer punya price tolerance", customer.price_tolerance > 0.0,
+		"(dapat %.0f)" % customer.price_tolerance)
+
+	# Simulate the customer having arrived at the seat.
+	customer.global_position = customer.target_position
+	customer.state = Customer.State.WAITING
+	_check("Customer adalah customer pertama", spawner.next_customer() == customer)
+
+	# --- Serve the correct brand ---
+	prep.open_build()
+	prep.select_brand(customer.order_brand)
+	prep.pour(1.0)
+	prep.add_water()
+	prep.stir()
+	prep.add_ice(4)
+	prep.add_straw()
+	var order_bag := prep.build_bag()
+	stand.offer_bag(order_bag)
+	var money_before := inv.money
+	var result := stand.serve_offered_to(customer)
+	_check("Es yang benar diterima", bool(result.get("accepted", false)),
+		"(%s)" % str(result.get("line", "")))
+	_check("Pelanggan membayar", inv.money > money_before,
+		"(dapat %.0f)" % inv.money)
+	_check("Ada tip untuk es berkualitas", float(result.get("tip", 0.0)) > 0.0,
+		"(dapat %.0f)" % float(result.get("tip", 0.0)))
+	_check("Satisfaction > 0", float(result.get("satisfaction", 0.0)) > 0.0,
+		"(dapat %.2f)" % float(result.get("satisfaction", 0.0)))
+	_check("Uang masuk = harga + tip",
+		is_equal_approx(inv.money - money_before,
+			order_bag.sell_price + float(result.get("tip", 0.0))))
+
+	# --- Wrong brand is refused ---
+	var other: SachetBrand = null
+	for b in catalog.brands:
+		if b.id != customer.order_brand.id:
+			other = b
+			break
+	prep.open_build()
+	prep.select_brand(other)
+	prep.pour(1.0)
+	prep.add_water()
+	prep.stir()
+	prep.add_ice(4)
+	prep.add_straw()
+	var wrong_bag := prep.build_bag()
+	stand.offer_bag(wrong_bag)
+	var money_before2 := inv.money
+	var annoyance_before := customer.annoyance_level
+	var result2 := stand.serve_offered_to(customer)
+	_check("Brand salah ditolak", bool(result2.get("refused", false)),
+		"(%s)" % str(result2.get("line", "")))
+	_check("Brand salah tidak dibayar", is_equal_approx(inv.money, money_before2),
+		"(dapat %.0f, harusnya %.0f)" % [inv.money, money_before2])
+	_check("Brand salah menaikkan annoyance", customer.annoyance_level > annoyance_before,
+		"(dapat %.2f)" % customer.annoyance_level)
+
+	# --- Overprice: still pays, but no tip ---
+	prep.open_build()
+	prep.select_brand(customer.order_brand)
+	prep.pour(1.0)
+	prep.add_water()
+	prep.stir()
+	prep.add_ice(4)
+	prep.add_straw()
+	var pricey_bag := prep.build_bag()
+	pricey_bag.sell_price = pricey_bag.cost() * 2.0
+	stand.offer_bag(pricey_bag)
+	var money_before3 := inv.money
+	var result3 := stand.serve_offered_to(customer)
+	_check("Overprice tetap dibayar", inv.money > money_before3,
+		"(dapat %.0f)" % inv.money)
+	_check("Overprice tidak dapat tip", is_equal_approx(float(result3.get("tip", -1.0)), 0.0),
+		"(dapat %.0f)" % float(result3.get("tip", -1.0)))
+	_check("Overprice tetap diterima", bool(result3.get("accepted", false)))
+
+	# --- Annoyance escalation tiers ---
+	var complaints: Array[String] = []
+	customer.complain.connect(func(line: String, _level: float) -> void:
+		complaints.append(line)
+	)
+	customer.annoyance_rate = 1.0
+	customer.annoyance_level = 0.59
+	customer.last_complaint_tier = -1
+	complaints.clear()
+	customer._tick_annoyance(6.0)
+	_check("Keluhan pada tier 0.60", complaints.size() == 1
+		and complaints[0] == "Mau es apa berak bang?",
+		"(dapat %s)" % str(complaints))
+
+	complaints.clear()
+	customer.annoyance_level = 0.99
+	customer._tick_annoyance(45.0)
+	_check("Keluhan pada tier 1.00", complaints.size() == 1
+		and complaints[0] == "Berhenti main HP, bang!",
+		"(dapat %s)" % str(complaints))
+	_check("Annoyance maksimal 1.0", is_equal_approx(customer.annoyance_level, 1.0))
+
+	# --- The stand never exceeds seats + max_queue ---
+	var guard := 0
+	while spawner.try_spawn() and guard < 30:
+		guard += 1
+	var seated := 0
+	var queued := 0
+	for c in spawner.customers:
+		if c == null or not is_instance_valid(c):
+			continue
+		if c.state == Customer.State.LEAVING or c.state == Customer.State.SERVED:
+			continue
+		if c.is_seated:
+			seated += 1
+		else:
+			queued += 1
+	_check("Spawn berhenti saat stand penuh", not spawner.try_spawn())
+	_check("Tidak melebihi kapasitas stand",
+		seated <= spawner.location_def.seats and queued <= spawner.location_def.max_queue,
+		"(duduk %d/%d, antre %d/%d)" % [seated, spawner.location_def.seats,
+			queued, spawner.location_def.max_queue])
+
+
+# --- Task 8 ---------------------------------------------------------------
+
+func _test_task8(loc_root: Node3D) -> void:
+	var inv: Inventory = get_tree().root.get_node_or_null("Inventory")
+	var catalog: Catalog = get_tree().root.get_node_or_null("Catalog")
+	var ui_layer := get_tree().root.get_node_or_null("UILayer") as UILayer
+	var econ := get_tree().root.get_node_or_null("Economy")
+	if inv == null or catalog == null:
+		_fail("Autoload Catalog/Inventory hilang — Task 8 dilewati.")
+		return
+
+	# --- Slot bookkeeping -------------------------------------------------
+	_check("Startup tool kecil ada di slot 'cooler'",
+		inv.tool_in_slot(&"cooler") != null
+		and inv.tool_in_slot(&"cooler").id == &"ice_cooler_small")
+	_check("Quality mod total = 1.0", is_equal_approx(inv.total_quality_mod(), 1.0),
+		"(dapat %.2f)" % inv.total_quality_mod())
+	_check("Kapasitas es total = 8", inv.total_ice_capacity() == 8,
+		"(dapat %d)" % inv.total_ice_capacity())
+
+	# --- Buying an upgrade replaces the tool in the same slot ------------
+	var big: Tool = catalog.tool_by_id(&"ice_cooler_large")
+	_check("Catalog punya ice_cooler_large", big != null)
+	if big == null:
+		return
+
+	# The upgrade unlocks on day 2 — check the unlock gate first.
+	_check("ice_cooler_large terkunci di hari 1",
+		not catalog.available_on_day(1).any(func(t): return t.id == &"ice_cooler_large"))
+	_check("ice_cooler_large terbuka di hari 2",
+		catalog.available_on_day(2).any(func(t): return t.id == &"ice_cooler_large"))
+
+	# Give the player enough cash and buy it.
+	inv.money = 500000.0
+	var money_before_buy: float = inv.money
+	var bought: bool = inv.buy_tool(big)
+	_check("Beli upgrade berhasil", bought)
+	_check("Beli upgrade mengurangi uang",
+		is_equal_approx(inv.money, money_before_buy - big.cost),
+		"(dapat %.0f, harusnya %.0f)" % [inv.money, money_before_buy - big.cost])
+	_check("Cooler besar menggantikan yang kecil di slot 'cooler'",
+		inv.tool_in_slot(&"cooler") != null
+		and inv.tool_in_slot(&"cooler").id == &"ice_cooler_large")
+	var cooler_count: int = 0
+	for t in inv.owned_tools:
+		if t.slot == &"cooler":
+			cooler_count += 1
+	_check("Tidak ada dua tool di slot yang sama", cooler_count == 1,
+		"(dapat %d)" % cooler_count)
+	_check("Kapasitas es jadi 16", inv.total_ice_capacity() == 16,
+		"(dapat %d)" % inv.total_ice_capacity())
+	_check("Quality mod naik jadi 1.2", is_equal_approx(inv.total_quality_mod(), 1.2),
+		"(dapat %.2f)" % inv.total_quality_mod())
+
+	# Buying the same tool twice must fail.
+	_check("Tidak bisa beli tool yang sama dua kali", not inv.buy_tool(big))
+
+	# --- The stand picks the upgrade up immediately ----------------------
+	var stand := _find_stand(loc_root)
+	if stand != null:
+		_check("Stand memakai cooler besar",
+			stand.equipment.ice_capacity() == 16,
+			"(dapat %d)" % stand.equipment.ice_capacity())
+		_check("StandEquipment quality mod = 1.2",
+			is_equal_approx(stand.equipment.quality_mod(), 1.2),
+			"(dapat %.2f)" % stand.equipment.quality_mod())
+
+	# --- Shop panel --------------------------------------------------------
+	if ui_layer != null:
+		ui_layer.open_shop()
+		_check("Panel toko terbuka", ui_layer.is_shop_panel_open())
+		var rows := ui_layer.get("_shop_tools") as Array
+		_check("Toko punya upgrade cooler besar",
+			rows.any(func(t): return (t as Tool).id == &"ice_cooler_large"))
+		ui_layer.close_shop()
+		_check("Panel toko tertutup", not ui_layer.is_shop_panel_open())
+
+	# --- Per-location rent --------------------------------------------------
+	if econ != null:
+		var pasar: LocationDef = catalog.location_by_id(&"pasar")
+		var rumah: LocationDef = catalog.location_by_id(&"rumah")
+		_check("Sewa Pasar = 30", pasar != null and is_equal_approx(pasar.rent_cost, 30.0))
+		_check("Sewa Rumah = 15", rumah != null and is_equal_approx(rumah.rent_cost, 15.0))
+
+		econ.record_sale(&"tejus", &"pasar", 5000.0)
+		var money_before_rent: float = inv.money
+		var rent: float = econ.charge_rent(&"pasar")
+		_check("Sewa Pasar tertagih 30", is_equal_approx(rent, 30.0),
+			"(dapat %.0f)" % rent)
+		_check("Sewa mengurangi uang",
+			is_equal_approx(inv.money, money_before_rent - 30.0),
+			"(dapat %.0f)" % inv.money)
+		_check("Sewa lokasi sama tidak ditagih dua kali",
+			is_equal_approx(econ.charge_rent(&"pasar"), 0.0))
+
+
+# --- Task 9 -------------------------------------------------------------
+
+## Task 9: the UILayer polish — the live order queue, the desktop price
+## slider and the richer day-end recap.
+func _test_task9(loc_root: Node3D) -> void:
+	var ui_layer := get_tree().root.get_node_or_null("UILayer") as UILayer
+	if ui_layer == null:
+		_fail("Autoload UILayer hilang — Task 9 dilewati.")
+		return
+
+	# --- The order queue panel -------------------------------------------
+	var rows_box := ui_layer.get("_order_rows_box") as VBoxContainer
+	var queue_label := ui_layer.get("_order_queue_label") as Label
+	_check("Panel antrian ada di UILayer", rows_box != null and queue_label != null)
+	if rows_box == null or queue_label == null:
+		return
+
+	var waiting := ui_layer.waiting_customers()
+	var all_customers := true
+	for c in waiting:
+		if not (c is Customer):
+			all_customers = false
+	_check("Antrean hanya berisi object Customer", all_customers)
+
+	ui_layer.refresh_order_queue()
+	_check("Jumlah baris antrian = pelanggan yang menunggu",
+		rows_box.get_child_count() == waiting.size(),
+		"(baris %d, menunggu %d)" % [rows_box.get_child_count(), waiting.size()])
+	_check("Judul antrian menyebut jumlah orang",
+		queue_label.text.begins_with("Antrian: %d" % waiting.size()),
+		"(teks '%s')" % queue_label.text)
+
+	# --- The day bar follows TimeOfDay ------------------------------------
+	var day_bar := ui_layer.get("_day_bar") as ProgressBar
+	_check("Progress bar hari ada", day_bar != null)
+	if day_bar != null:
+		ui_layer._on_time_tick(90.0, 0.5)
+		_check("Progress bar hari mengikuti waktu TimeOfDay",
+			is_equal_approx(day_bar.value, 0.5),
+			"(nilai %.3f)" % day_bar.value)
+
+	# --- The desktop price slider ----------------------------------------
+	var slider := ui_layer.get("_price_slider") as HSlider
+	_check("Slider harga dibuat", slider != null)
+	var stand := _find_stand(loc_root)
+	if slider != null and stand != null:
+		var catalog: Catalog = get_tree().root.get_node_or_null("Catalog")
+		var brand: SachetBrand = null
+		if catalog != null and catalog.brands.size() > 0:
+			brand = catalog.brands[0]
+		if brand != null:
+			var prep := stand.prep_station
+			prep.open_build()
+			prep.select_brand(brand)
+			prep.pour(1.0)
+			prep.add_water()
+			prep.stir()
+			prep.add_ice(4)
+			prep.add_straw()
+			var bag := prep.build_bag()
+			_check("Bisa membuat tas untuk tes slider", bag != null)
+			if bag != null:
+				stand.offer_bag(bag)
+				ui_layer.update_prep(stand.snapshot())
+				_check("Slider harga terlihat saat ada tas", slider.visible)
+				_check("Batas bawah slider = modal",
+					is_equal_approx(slider.min_value, minf(bag.cost(), bag.fair_price_min())),
+					"(dapat %.0f, modal %.0f)" % [slider.min_value, bag.cost()])
+				# The slider must show exactly the price that is charged.
+				_check("Nilai slider = harga tas",
+					absf(slider.value - bag.sell_price) <= 0.05,
+					"(slider %.2f, harga %.2f)" % [slider.value, bag.sell_price])
+				# Regression: updating the slider must never overwrite the
+				# price of the bag with the cost of the ingredients.
+				_check("Slider tidak menimpa harga tas",
+					is_equal_approx(bag.sell_price, bag.recommended_price()),
+					"(dapat %.2f, harusnya %.2f)" % [bag.sell_price, bag.recommended_price()])
+
+				# The price may never drop below the cost of the ingredients.
+				stand._set_price(1.0)
+				_check("Harga tidak boleh di bawah modal",
+					is_equal_approx(bag.sell_price, bag.cost()),
+					"(dapat %.0f, modal %.0f)" % [bag.sell_price, bag.cost()])
+
+				# The slider drives the stand through the prep_action signal.
+				ui_layer.prep_action.emit(UILayer.ACTION_PRICE_SET, 25000.0)
+				_check("Slider harga mengubah harga di stand",
+					is_equal_approx(bag.sell_price, 25000.0),
+					"(dapat %.0f)" % bag.sell_price)
+				stand.take_bag()
+
+	# --- The richer day-end recap ------------------------------------------
+	var detail := ui_layer.get("_day_end_detail") as Label
+	_check("Label detail rekap harian ada", detail != null)
+	if detail != null:
+		ui_layer.show_day_end({
+			"day": 3,
+			"revenue": 25000.0,
+			"expenses": 10000.0,
+			"profit": 15000.0,
+			"best_brand": "Tejus",
+			"sales": 5,
+			"location_profit": {"pasar": 12000.0},
+			"rent_by_location": {"pasar": 30.0},
+			"new_unlocks": [],
+		})
+		_check("Detail rekap menampilkan laba per lokasi",
+			detail.text.contains("Laba per lokasi"),
+			"(teks '%s')" % detail.text)
+		_check("Detail rekap menampilkan nama lokasi",
+			detail.text.contains("Pasar"),
+			"(teks '%s')" % detail.text)
+		_check("Detail rekap menampilkan sewa",
+			detail.text.contains("Sewa"),
+			"(teks '%s')" % detail.text)
+	# Hide the panel again so it does not block the rest of the run.
+	var panel := ui_layer.get("_day_end_panel") as Control
+	if panel != null:
+		panel.visible = false
+
+
+# --- Task 4 (lighting) --------------------------------------------------
+
+## Pencahayaan siang/malam yang BENAR-benar mengubah matahari + langit.
+func _test_timeofday_lighting() -> void:
+	var tod := get_tree().root.get_node_or_null("TimeOfDay")
+	_check("Autoload TimeOfDay ada", tod != null)
+	if tod == null:
+		return
+
+	var sun := tod.get("sun_light") as DirectionalLight3D
+	var world_env := tod.get("environment") as WorldEnvironment
+	_check("TimeOfDay memegang sun_light", sun != null)
+	_check("TimeOfDay memegang environment", world_env != null)
+	if sun == null or world_env == null:
+		return
+
+	# --- Siang: matahari terang ---
+	tod.apply_lighting(0.45)
+	var noon_energy: float = sun.light_energy
+	var noon_color: Color = sun.light_color
+	var noon_pitch: float = sun.rotation_degrees.x
+	_check("Matahari terang saat siang", noon_energy > 0.8, "(energi %.2f)" % noon_energy)
+	_check("Matahari berwarna terang saat siang", noon_color.get_luminance() > 0.5,
+		"(warna %s)" % noon_color)
+
+	# --- Malam: matahari redup ---
+	tod.apply_lighting(1.0)
+	var night_energy: float = sun.light_energy
+	var night_color: Color = sun.light_color
+	_check("Matahari redup saat malam", night_energy < 0.3, "(energi %.2f)" % night_energy)
+	_check("Malam lebih gelap dari siang", night_energy < noon_energy)
+	_check("Warna malam berbeda dari siang", not night_color.is_equal_approx(noon_color),
+		"(malam %s, siang %s)" % [night_color, noon_color])
+	_check("Sudut matahari berubah antara siang dan malam",
+		not is_equal_approx(noon_pitch, sun.rotation_degrees.x),
+		"(siang %.1f, malam %.1f)" % [noon_pitch, sun.rotation_degrees.x])
+
+	# --- Langit juga berubah ---
+	var env := world_env.environment
+	_check("Environment punya sky", env != null and env.sky != null)
+	if env != null and env.sky != null:
+		var sky_mat := env.sky.sky_material as ProceduralSkyMaterial
+		_check("Sky material = ProceduralSkyMaterial", sky_mat != null)
+		if sky_mat != null:
+			tod.apply_lighting(0.45)
+			var noon_top: Color = sky_mat.sky_top_color
+			tod.apply_lighting(1.0)
+			var night_top: Color = sky_mat.sky_top_color
+			_check("Warna langit atas berubah siang vs malam",
+				not noon_top.is_equal_approx(night_top),
+				"(siang %s, malam %s)" % [noon_top, night_top])
+			_check("Langit siang lebih terang dari langit malam",
+				noon_top.get_luminance() > night_top.get_luminance(),
+				"(siang %.3f, malam %.3f)" % [noon_top.get_luminance(), night_top.get_luminance()])
+
+	# --- Aksen per lokasi hanya menggeser warna sedikit ---
+	tod.apply_lighting(0.45)
+	var tint_before: Color = sun.light_color
+	tod.set_sun_tint(Color(1, 0, 0))
+	tod.apply_lighting(0.45)
+	var tint_after: Color = sun.light_color
+	_check("Aksen lokasi mengubah warna matahari",
+		not tint_before.is_equal_approx(tint_after),
+		"(sebelum %s, sesudah %s)" % [tint_before, tint_after])
+	tod.set_sun_tint(Color(1, 1, 1))
+
+
+# --- Task 12 (3D feedback) -----------------------------------------------
+
+## Visual 3D: tas di meja, bubble keluhan, dan pose kesal.
+func _test_task12_feedback(loc_root: Node3D) -> void:
+	var stand := _find_stand(loc_root)
+	_check("Stand ada untuk tes visual", stand != null)
+	if stand == null:
+		return
+
+	# --- Tas di meja ---
+	var bag_visual := stand.get("bag_visual") as Node3D
+	var bag_liquid := stand.get("bag_liquid") as MeshInstance3D
+	var bag_straw := stand.get("bag_straw") as MeshInstance3D
+	_check("Node BagVisual ada di stand", bag_visual != null)
+	_check("Node Liquid ada di stand", bag_liquid != null)
+	_check("Node Straw ada di stand", bag_straw != null)
+	if bag_visual == null or bag_liquid == null or bag_straw == null:
+		return
+	_check("Tas tersembunyi saat tidak ada tas di meja", not bag_visual.visible)
+
+	var catalog: Catalog = get_tree().root.get_node_or_null("Catalog")
+	if catalog == null or catalog.brands.is_empty():
+		_fail("Catalog tidak ada - tes visual dilewati.")
+		return
+	# Pakai brand termahal (5k) supaya prep_quality bisa tinggi.
+	var brand: SachetBrand = catalog.brands[0]
+	for b in catalog.brands:
+		if b.price_tier >= brand.price_tier:
+			brand = b
+	_check("Brand 5k tersedia untuk tes visual", brand.price_tier == 5000,
+		"(tier %d)" % brand.price_tier)
+
+	# Pastikan stok cukup (es + sachet) untuk dua tas.
+	Inventory.add_ice(20)
+	Inventory.add_sachets(brand.id, 5)
+
+	# --- Tas yang dibuat sempurna (tanpa es) ---
+	# Tanpa es tidak ada efek memucatkan, jadi warna liquid harus persis
+	# warna brand selama kualitasnya di atas batas "keruh".
+	var prep := stand.prep_station
+	prep.open_build()
+	prep.select_brand(brand)
+	prep.pour(1.0)
+	prep.add_water()
+	prep.stir()
+	prep.add_straw()
+	var good_bag := prep.build_bag()
+	_check("Bisa membuat tas sempurna untuk tes visual", good_bag != null)
+	if good_bag == null:
+		return
+	stand.offer_bag(good_bag)
+	_check("Tas muncul di meja", bag_visual.visible)
+	_check("Tas sempurna punya prep_quality tinggi", good_bag.prep_quality >= 60,
+		"(kualitas %d)" % good_bag.prep_quality)
+
+	var mat := bag_liquid.material_override as StandardMaterial3D
+	_check("Material liquid tas dibuat", mat != null)
+	var good_color := Color(0, 0, 0, 1)
+	if mat != null:
+		good_color = mat.albedo_color
+		_check("Warna liquid tas sempurna sama dengan warna brand",
+			good_color.is_equal_approx(brand.color_tint),
+			"(liquid %s, brand %s)" % [good_color, brand.color_tint])
+	_check("Tas sempurna ada sedotannya", bag_straw.visible)
+	_check("Volume penuh -> liquid tinggi", bag_liquid.scale.y > 0.9,
+		"(skala %.2f)" % bag_liquid.scale.y)
+
+	# --- Tas dengan es: warna liquid jadi lebih pucat ---
+	prep.open_build()
+	prep.select_brand(brand)
+	prep.pour(1.0)
+	prep.add_water()
+	prep.stir()
+	prep.add_ice(4)
+	prep.add_straw()
+	var iced_bag := prep.build_bag()
+	_check("Bisa membuat tas beres untuk tes visual", iced_bag != null)
+	if iced_bag != null:
+		stand.offer_bag(iced_bag)
+		var iced_color := Color(0, 0, 0, 1)
+		if mat != null:
+			iced_color = mat.albedo_color
+		_check("Es membuat warna liquid lebih pucat",
+			iced_color.get_luminance() > good_color.get_luminance(),
+			"(es %s, tanpa es %s)" % [iced_color, good_color])
+
+	# --- Tas asal-asalan: kualitas rendah -> warna pudar ---
+	prep.open_build()
+	prep.select_brand(brand)
+	prep.pour(0.2)
+	var bad_bag := prep.build_bag()
+	_check("Bisa membuat tas asal-asalan untuk tes visual", bad_bag != null)
+	if bad_bag != null:
+		stand.offer_bag(bad_bag)
+		var bad_color := Color(0, 0, 0, 1)
+		if mat != null:
+			bad_color = mat.albedo_color
+		_check("Tas asal-asalan lebih pucat dari tas sempurna",
+			bad_color.s < good_color.s,
+			"(buruk %s, bagus %s)" % [bad_color, good_color])
+		_check("Volume sedikit -> liquid pendek", bag_liquid.scale.y < 0.6,
+			"(skala %.2f)" % bag_liquid.scale.y)
+		_check("Tas asal-asalan tanpa sedotan", not bag_straw.visible)
+
+	# --- Tas diambil dari meja -> hilang ---
+	stand.take_bag()
+	_check("Tas hilang dari meja setelah diambil", not bag_visual.visible)
+
+	# --- Bubble keluhan + pose kesal ---
+	var customer_scene: PackedScene = load("res://src/entities/Customer.tscn")
+	_check("Scene Customer bisa dimuat", customer_scene != null)
+	if customer_scene == null:
+		return
+	var customer := customer_scene.instantiate() as Customer
+	_check("Customer ter-instantiate dari scene", customer != null)
+	if customer == null:
+		return
+	loc_root.add_child(customer)
+
+	var bubble := customer.bubble
+	_check("Pelanggan punya bubble 3D", bubble != null)
+	if bubble != null:
+		_check("Bubble tersembunyi saat tidak ada keluhan", not bubble.visible)
+		customer.show_bubble("Lama amat, bang...")
+		_check("Bubble muncul saat keluhan", bubble.visible)
+		_check("Bubble berisi teks keluhan", bubble.text.contains("Lama amat"),
+			"(teks '%s')" % bubble.text)
+		customer.update_feedback(Customer.BUBBLE_TIME + 0.1)
+		_check("Bubble hilang setelah waktunya habis", not bubble.visible)
+		# Sinyal complain harus otomatis memunculkan bubble.
+		customer.complain.emit("Mau es apa berak bang?", 0.6)
+		_check("Sinyal complain memunculkan bubble", bubble.visible)
+
+	var body := customer.body
+	_check("Pelanggan punya badan 3D", body != null)
+	if body != null:
+		customer.annoyance_level = 0.0
+		customer.apply_pose(0.0)
+		_check("Pose netral -> badan tegak", is_equal_approx(body.scale.y, 1.0),
+			"(skala %.2f)" % body.scale.y)
+		_check("Belum kesal -> tidak jongkok", customer.target_crouch() == 0.0,
+			"(target %.2f)" % customer.target_crouch())
+		customer.annoyance_level = 0.65
+		_check("Kesal sedang -> jongkok separuh", customer.target_crouch() >= 0.5,
+			"(target %.2f)" % customer.target_crouch())
+		customer.annoyance_level = 1.0
+		_check("Maksimal kesal -> jongkok penuh", customer.target_crouch() >= 0.9,
+			"(target %.2f)" % customer.target_crouch())
+		customer.apply_pose(customer.target_crouch())
+		_check("Pose kesal -> badan memendek", body.scale.y < 0.9,
+			"(skala %.2f)" % body.scale.y)
+		var body_mat := body.material_override as StandardMaterial3D
+		_check("Pose kesal -> badan punya material sendiri", body_mat != null)
+		if body_mat != null:
+			_check("Pose kesal -> badan makin merah",
+				body_mat.albedo_color.r > Customer.BODY_COLOR.r,
+				"(warna %s)" % body_mat.albedo_color)
+		# Pelanggan yang sudah dilayani tidak lagi jongkok.
+		customer.state = Customer.State.SERVED
+		_check("Pelanggan yang dilayani tegak lagi", customer.target_crouch() == 0.0,
+			"(target %.2f)" % customer.target_crouch())
+
+	customer.queue_free()
+
+
+## Task 11 — virtual joystick (Android) harus benar-benar menggerakkan pemain.
+## Regresi untuk bug lama: `_find_ui_layer()` mencari method `set_move_vector`
+## yang tidak pernah ada, sehingga vektor gerak tidak pernah sampai ke Player.
+func _test_virtual_joystick() -> void:
+	var ui := get_tree().root.get_node_or_null("UILayer")
+	_check("Autoload UILayer ada (joystick)", ui != null)
+	if ui == null:
+		return
+
+	_check("UILayer punya method set_move_vector",
+		ui.has_method("set_move_vector"))
+
+	var joystick := _find_joystick(ui)
+	_check("Node VirtualJoystick ada di scene UI", joystick != null)
+	if joystick == null:
+		return
+
+	# Joystick harus bisa menemukan node UILayer di rantai parent-nya.
+	var target: Node = joystick.call("_find_ui_layer")
+	_check("Joystick menemukan UILayer di parent chain", target != null)
+	_check("Target joystick punya set_move_vector",
+		target != null and target.has_method("set_move_vector"))
+
+	# Simulasikan drag ke kanan: vektor harus terbit di UILayer.move_vector.
+	ui.call("set_move_vector", Vector2.ZERO)
+	joystick.call("_update", Vector2(120.0, 0.0))
+	var published: Vector2 = ui.get("move_vector")
+	_check("Drag joystick mempublikasikan vektor",
+		published.length() > 0.01,
+		"(vektor %s)" % str(published))
+	_check("Vektor bergerak ke kanan (x positif)", published.x > 0.0,
+		"(vektor %s)" % str(published))
+
+	# Lepas joystick -> vektor kembali nol.
+	joystick.call("_release")
+	var cleared: Vector2 = ui.get("move_vector")
+	_check("Lepas joystick -> vektor kembali nol",
+		cleared.length() < 0.001,
+		"(vektor %s)" % str(cleared))
+
+
+## Regresi bug build .exe: W berjalan mundur dan S berjalan maju.
+##
+## `Input.get_vector(move_left, move_right, move_forward, move_back)` memberi
+## y = -1 untuk W dan y = +1 untuk S. Kamera pemain menghadap ke -Z, jadi
+## W harus menghasilkan z negatif (maju menjauhi kamera).
+func _test_movement_direction() -> void:
+	var fwd: Vector3 = PLAYER_SCRIPT.input_to_world(Vector2(0.0, -1.0))
+	_check("Tekan W -> pemain maju ke arah -Z", fwd.z < -0.9,
+		"(arah %s)" % str(fwd))
+	var back: Vector3 = PLAYER_SCRIPT.input_to_world(Vector2(0.0, 1.0))
+	_check("Tekan S -> pemain mundur ke arah +Z", back.z > 0.9,
+		"(arah %s)" % str(back))
+	var right: Vector3 = PLAYER_SCRIPT.input_to_world(Vector2(1.0, 0.0))
+	_check("Tekan D -> pemain bergerak ke +X", right.x > 0.9,
+		"(arah %s)" % str(right))
+	var left: Vector3 = PLAYER_SCRIPT.input_to_world(Vector2(-1.0, 0.0))
+	_check("Tekan A -> pemain bergerak ke -X", left.x < -0.9,
+		"(arah %s)" % str(left))
+
+	# Joystick harus memakai konvensi yang sama dengan keyboard:
+	# digeser ke atas (koordinat layar) -> y negatif -> maju (-Z).
+	var ui := get_tree().root.get_node_or_null("UILayer")
+	if ui != null:
+		var joystick := _find_joystick(ui)
+		if joystick != null:
+			ui.call("set_move_vector", Vector2.ZERO)
+			joystick.call("_update", Vector2(0.0, -120.0))
+			var joy: Vector2 = ui.get("move_vector")
+			_check("Joystick ke atas -> vektor y negatif", joy.y < -0.9,
+				"(vektor %s)" % str(joy))
+			var joy_fwd: Vector3 = PLAYER_SCRIPT.input_to_world(joy)
+			_check("Joystick atas -> arah maju (-Z)", joy_fwd.z < -0.9,
+				"(arah %s)" % str(joy_fwd))
+			joystick.call("_release")
+
+
+## Cari node VirtualJoystick di bawah scene UI milik autoload UILayer.
+func _find_joystick(ui: Node) -> Node:
+	var root := ui.get("_ui_root") as Node
+	if root == null:
+		return null
+	return root.get_node_or_null("VirtualJoystick")
+
+
+## Task 12 — SFX prosedural (autoload `Audio`, tanpa aset eksternal).
+func _test_task12_sfx(loc_root: Node3D) -> void:
+	var audio := get_tree().root.get_node_or_null("Audio")
+	_check("Autoload Audio ada", audio != null)
+	if audio == null:
+		return
+
+	# --- Daftar bunyi ---
+	var ids: Array = audio.call("sfx_ids")
+	_check("Ada 10 bunyi yang terdaftar", ids.size() == 10,
+		"(dapat %d)" % ids.size())
+	for required in [&"pour", &"stir", &"ice", &"cash", &"complain"]:
+		_check("Bunyi '%s' terdaftar" % required, ids.has(required))
+
+	# --- Setiap bunyi harus benar-benar menghasilkan stream audio ---
+	for id in ids:
+		var stream: AudioStreamWAV = audio.call("_stream_for", id)
+		_check("Bunyi '%s' punya stream PCM" % id,
+			stream != null and stream.data.size() > 0)
+		if stream != null:
+			_check("Bunyi '%s' format 16-bit" % id,
+				stream.format == AudioStreamWAV.FORMAT_16_BITS)
+
+	# --- Bunyi bisa dimainkan tanpa error ---
+	for id in ids:
+		audio.call("play", id)
+	_check("Semua bunyi bisa dimainkan tanpa error", true)
+
+	# --- Cache: stream yang sama dipakai ulang ---
+	var s1: AudioStreamWAV = audio.call("_stream_for", &"pour")
+	var s2: AudioStreamWAV = audio.call("_stream_for", &"pour")
+	_check("Stream bunyi di-cache (objek sama)", s1 == s2)
+
+	# --- Toggle enable / disable ---
+	audio.call("set_enabled", false)
+	_check("Audio bisa dimatikan", not audio.call("is_enabled"))
+	audio.call("play", &"pour")
+	audio.call("set_enabled", true)
+	_check("Audio bisa dinyalakan lagi", audio.call("is_enabled"))
+
+	# --- Pool player siap ---
+	var pool: Array = audio.get("_pool")
+	_check("Pool SFX punya 8 player", pool.size() == 8,
+		"(dapat %d)" % pool.size())
+
+	# --- Ambient music loop ---
+	var ambient_player: AudioStreamPlayer = audio.get("_ambient_player")
+	_check("Ambient music berjalan", ambient_player != null)
+	if ambient_player != null:
+		var ambient := ambient_player.stream as AudioStreamWAV
+		_check("Ambient music loop", ambient != null
+			and ambient.loop_mode == AudioStreamWAV.LOOP_FORWARD)
+
+	# --- Hook ke kejadian game ---
+	var stand := _find_stand(loc_root)
+	if stand == null:
+		return
+	var prep := stand.prep_station
+	var log: Array = audio.get("play_log")
+
+	# --- Langkah prep -> bunyi ---
+	log.clear()
+	prep.open_build()
+	prep.select_brand(Catalog.brands[0])
+	prep.pour(0.8)
+	prep.add_water()
+	prep.stir()
+	prep.add_ice(2)
+	prep.add_straw()
+	await get_tree().process_frame
+	_check("Langkah prep memicu bunyi", log.size() >= 5,
+		"(dapat %d: %s)" % [log.size(), log])
+	_check("Bunyi 'pour' dipanggil saat menuang", log.has(&"pour"))
+	_check("Bunyi 'water' dipanggil saat menambah air", log.has(&"water"))
+	_check("Bunyi 'stir' dipanggil saat mengaduk", log.has(&"stir"))
+	_check("Bunyi 'ice' dipanggil saat menambah es", log.has(&"ice"))
+	_check("Bunyi 'straw' dipanggil saat menambah sedotan", log.has(&"straw"))
+
+	# --- Bunyi 'build' saat tas jadi ---
+	Inventory.add_sachets(Catalog.brands[0].id, 2)
+	log.clear()
+	var bag := prep.build_bag()
+	_check("Tas berhasil dibuat untuk tes bunyi", bag != null)
+	_check("Bunyi 'build' dipanggil saat tas jadi", log.has(&"build"))
+
+	# --- Pelanggan yang mengeluh -> bunyi complain ---
+	var customer_scene: PackedScene = load("res://src/entities/Customer.tscn")
+	_check("Scene Customer bisa dimuat", customer_scene != null)
+	var customer := customer_scene.instantiate() as Customer
+	if customer != null:
+		loc_root.add_child(customer)
+		log.clear()
+		customer.complain.emit("Lama amat, bang...", 0.6)
+		_check("Bunyi 'complain' dipanggil saat pelanggan mengeluh",
+			log.has(&"complain"))
+		customer.queue_free()
+
+	# --- Melayani pelanggan -> bunyi cash + serve ---
+	var brand: SachetBrand = Catalog.brands[0]
+	var c2 := customer_scene.instantiate() as Customer
+	if c2 != null:
+		loc_root.add_child(c2)
+		c2.setup(brand, 1.0)
+		c2.state = Customer.State.WAITING
+		prep.open_build()
+		prep.select_brand(brand)
+		prep.pour(1.0)
+		prep.add_water()
+		prep.stir()
+		prep.add_ice(2)
+		prep.add_straw()
+		var good_bag := prep.build_bag()
+		if good_bag != null:
+			stand.offer_bag(good_bag)
+			log.clear()
+			var result := stand.serve_offered_to(c2)
+			_check("Es tanpa masalah diterima pelanggan",
+				bool(result.get("accepted", false)),
+				"(hasil %s)" % result)
+			_check("Bunyi 'cash' dipanggil setelah pembayaran",
+				log.has(&"cash"))
+			_check("Bunyi 'serve' dipanggil saat menyerahkan es",
+				log.has(&"serve"))
+		c2.queue_free()
+
+
+# --- Helpers -------------------------------------------------------------
+
+func _find_stand(loc_root: Node3D) -> Stand:
+	if loc_root == null:
+		return null
+	return loc_root.get_node_or_null("StandSlot/Stand") as Stand
+
+
+## True bila node (atau turunannya) punya MeshInstance3D dengan mesh berisi
+## permukaan sungguhan. Dipakai untuk memastikan propsi stand sudah pakai
+## aset Kenney, bukan BoxMesh primitif.
+func _has_mesh(node: Node) -> bool:
+	if node == null:
+		return false
+	if node is MeshInstance3D:
+		var mi := node as MeshInstance3D
+		if mi.mesh == null:
+			return false
+		return mi.mesh.get_surface_count() > 0
+	for child in node.get_children():
+		if _has_mesh(child):
+			return true
+	return false
 
 
 func _fail(msg: String) -> void:
@@ -145,4 +1218,4 @@ func _fail(msg: String) -> void:
 
 func _finish() -> void:
 	print("=== Selesai: %d/%d cek lolos, %d gagal ===" % [_checks - _failures, _checks, _failures])
-	quit(0 if _failures == 0 else 1)
+	get_tree().quit(0 if _failures == 0 else 1)

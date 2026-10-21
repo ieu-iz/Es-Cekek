@@ -1,55 +1,50 @@
 ; Engine configuration file.
-; Es Cekek — MVP v1 (Godot 4.x)
-; Plan Task 1: project scaffolding, 3D / Mobile renderer, folder layout.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
+
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 [application]
 
 config/name="Es Cekek"
 config/description="Simulasi warung es di kantong plastik (rendengan) — 3D open world."
+config/version="1.0.0"
 run/main_scene="res://src/Main.tscn"
-config/features=PackedStringArray("4.3", "Mobile")
+config/features=PackedStringArray("4.7", "Mobile")
+config/icon="res://assets/icon.png"
 
 [autoload]
 
-; The leading "*" marks the autoload as a GLOBAL IDENTIFIER (singleton), which is
-; what lets other scripts call e.g. `UILayer.show_loading(...)` directly.
-; Without the "*" the node is added to the tree but the name is not in scope.
-;
-; Order matters: Godot registers autoloads in this order, and a script may only
-; reference an autoload registered BEFORE it.
-;   InputSetup      -> no deps
-;   Inventory       -> no deps
-;   TimeOfDay       -> no deps
-;   UILayer         -> no deps
-;   LocationManager -> UILayer
-;   Economy         -> LocationManager, Inventory, UILayer
-InputSetup = "*res://src/autoload/InputSetup.gd"
-Inventory = "*res://src/autoload/Inventory.gd"
-TimeOfDay = "*res://src/autoload/TimeOfDay.gd"
-UILayer = "*res://src/autoload/UILayer.gd"
-LocationManager = "*res://src/autoload/LocationManager.gd"
-Economy = "*res://src/autoload/Economy.gd"
+InputSetup="*res://src/autoload/InputSetup.gd"
+Audio="*res://src/autoload/Audio.gd"
+Catalog="*res://src/autoload/Catalog.gd"
+Inventory="*res://src/autoload/Inventory.gd"
+TimeOfDay="*res://src/autoload/TimeOfDay.gd"
+UILayer="*res://src/autoload/UILayer.gd"
+LocationManager="*res://src/autoload/LocationManager.gd"
+Economy="*res://src/autoload/Economy.gd"
 
 [display]
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
-window/handheld/orientation=0
 
 [input_devices]
 
 pointing/emulate_touch_from_mouse=true
-pointing/emulate_mouse_from_touch=true
-
-[physics]
-
-3d/default_gravity=9.8
 
 [rendering]
 
 renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
 anti_aliasing/quality/msaa_3d=1

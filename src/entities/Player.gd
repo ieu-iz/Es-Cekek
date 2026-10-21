@@ -2,6 +2,7 @@
 # CharacterBody3D player. Plan §Architecture (Player) + Task 3.
 # State machine: ROAM (free walk) <-> AT_STAND (locked to the stand counter).
 # Movement: WASD/arrows on desktop, virtual joystick on Android.
+class_name Player
 extends CharacterBody3D
 
 enum State { ROAM, AT_STAND }
@@ -46,7 +47,7 @@ func _physics_process(delta: float) -> void:
 	if InputMap.has_action("run") and Input.is_action_pressed("run"):
 		target_speed = RUN_SPEED
 
-	var wish := Vector3(input_dir.x, 0.0, -input_dir.y) * target_speed
+	var wish := input_to_world(input_dir) * target_speed
 	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
 
 	if wish.length() > 0.01:
@@ -61,13 +62,29 @@ func _physics_process(delta: float) -> void:
 	_update_facing(wish, delta)
 
 
+## Mapping arah input (datar) -> arah gerak di dunia.
+##
+## PENTING: `Input.get_vector(neg_x, pos_x, neg_y, pos_y)` mengembalikan
+## y = -1 saat "move_forward" (W) ditekan dan y = +1 saat "move_back" (S).
+## Kamera pemain menghadap ke -Z (depan = -Z), jadi:
+##   W (y = -1) -> z = -1 (maju, menjauhi kamera)
+##   S (y = +1) -> z = +1 (mundur, mendekati kamera)
+## Tanda negate pernah terbalik di sini sehingga W berjalan mundur.
+static func input_to_world(dir: Vector2) -> Vector3:
+	return Vector3(dir.x, 0.0, dir.y)
+
+
 func _read_move_input() -> Vector2:
 	var dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	# Virtual joystick (Android) is published by UILayer.
 	var joy := UILayer.move_vector
 	if joy.length() > 0.01:
-		# Joystick y is UP = forward, but Input.get_vector expects forward = -Y.
-		dir += Vector2(joy.x, -joy.y)
+		# KONVENSI SAMA dengan Input.get_vector:
+		#   x = +1 kanan, y = -1 maju/atas.
+		# Joystick memakai koordinat layar (y ke bawah), jadi digeser ke atas
+		# menghasilkan y negatif — persis seperti "move_forward" di keyboard.
+		# Karena itu vektor joystick TIDAK boleh dinegasi lagi di sini.
+		dir += joy
 	return dir.limit_length(1.0)
 
 
@@ -97,9 +114,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _interact() -> void:
+	# The prep panel swallows INTERACT while it is open (Batal closes it).
+	if UILayer.is_prep_panel_open():
+		_release_stand()
+		return
+
 	if state == State.AT_STAND:
 		_set_state(State.ROAM)
-		UILayer.show_order("Tejus")
 		return
 
 	if _current_stand != null and is_instance_valid(_current_stand):
@@ -110,7 +131,23 @@ func _interact() -> void:
 		offset.y = 0.0
 		if offset.length() > 0.01:
 			global_position = target + offset.normalized() * stand_snap_distance
-		UILayer.show_order("Tejus")
+		# Opening the prep panel / serving happens on the stand itself.
+		if _current_stand.has_method("interact_at_stand"):
+			_current_stand.interact_at_stand()
+
+
+## Step away from the counter (used when the prep panel closes).
+## Only changes the state — it must never call back into close_prep(),
+## otherwise the two would recurse.
+func release_stand() -> void:
+	_set_state(State.ROAM)
+
+
+func _release_stand() -> void:
+	_set_state(State.ROAM)
+	var stand := _current_stand
+	if stand != null and is_instance_valid(stand) and stand.has_method("close_prep"):
+		stand.close_prep()
 
 
 func _set_state(new_state: State) -> void:
@@ -121,12 +158,27 @@ func _set_state(new_state: State) -> void:
 
 
 func _on_interact_area_body_entered(body_node: Node3D) -> void:
-	if body_node.is_in_group("stand"):
-		_current_stand = body_node
+	var stand := _resolve_stand(body_node)
+	if stand != null:
+		_current_stand = stand
 
 
 func _on_interact_area_body_exited(body_node: Node3D) -> void:
-	if body_node == _current_stand:
+	var stand := _resolve_stand(body_node)
+	if stand != null and stand == _current_stand:
 		_current_stand = null
 		if state == State.AT_STAND:
 			_set_state(State.ROAM)
+
+
+## The counter body sits inside the Stand node, so walk up to the node that
+## actually knows how to open the prep panel.
+func _resolve_stand(body_node: Node3D) -> Node3D:
+	if body_node == null:
+		return null
+	if body_node.has_method("interact_at_stand"):
+		return body_node
+	var parent := body_node.get_parent()
+	if parent != null and parent.has_method("interact_at_stand"):
+		return parent as Node3D
+	return null

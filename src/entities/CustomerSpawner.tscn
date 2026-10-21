@@ -1,0 +1,13 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/entities/CustomerSpawner.gd" id="1_spawner"]
+
+[sub_resource type="BoxMesh" id="1_marker_mesh"]
+size = Vector3(0.6, 0.05, 0.6)
+
+[node name="CustomerSpawner" type="Node3D"]
+script = ExtResource("1_spawner")
+
+[node name="Marker" type="MeshInstance3D" parent="."]
+mesh = SubResource("1_marker_mesh")
+position = Vector3(0, 0.02, 0)

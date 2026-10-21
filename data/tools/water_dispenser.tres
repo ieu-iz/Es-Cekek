@@ -4,9 +4,12 @@
 
 [resource]
 script = ExtResource("1_tool")
+slot = &"water"
 id = &"water_dispenser"
 display_name = "Dispenser Air"
 cost = 0.0
 quality_mod = 1.0
 capacity_mod = 0.0
-description = "Galon air mineral. Sumber air untuk mengisi kantong es."
+unlock_day = 1
+is_upgrade = false
+description = "Dispenser air galon. Modal awal pemain."

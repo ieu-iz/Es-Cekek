@@ -1,0 +1,29 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://src/stand/PrepStation.gd" id="1_prepstation"]
+[ext_resource type="PackedScene" path="res://assets/kenney/food/cutting-board.glb" id="ken_cutting_board"]
+[ext_resource type="PackedScene" path="res://assets/kenney/food/barrel.glb" id="ken_barrel"]
+[ext_resource type="PackedScene" path="res://assets/kenney/food/carton.glb" id="ken_carton"]
+[ext_resource type="PackedScene" path="res://assets/kenney/food/soda-can.glb" id="ken_soda_can"]
+
+[node name="PrepStation" type="Node3D"]
+script = ExtResource("1_prepstation")
+
+[node name="Rack" type="Node3D" parent="."]
+position = Vector3(0, 0, -0.22)
+
+[node name="CuttingBoard" parent="Rack" instance=ExtResource("ken_cutting_board")]
+position = Vector3(0.05, 0, 0)
+scale = Vector3(1.0, 1.0, 0.45)
+
+[node name="IceCooler" parent="." instance=ExtResource("ken_barrel")]
+position = Vector3(-0.42, 0, -0.2)
+scale = Vector3(0.45, 0.3, 0.45)
+
+[node name="WaterDispenser" parent="." instance=ExtResource("ken_carton")]
+position = Vector3(0.48, 0, -0.2)
+scale = Vector3(0.9, 0.4, 0.9)
+
+[node name="StrawHolder" parent="." instance=ExtResource("ken_soda_can")]
+position = Vector3(0.75, 0, -0.18)
+scale = Vector3(0.8, 0.8, 0.8)

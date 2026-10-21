@@ -1,5 +1,109 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=22 format=3]
 
-[ext_resource type="PackedScene" path="res://src/entities/Location.tscn" id="1_location"]
+[ext_resource type="Script" path="res://src/entities/Location.gd" id="1_location"]
+[ext_resource type="PackedScene" path="res://src/stand/Stand.tscn" id="2_stand"]
+[ext_resource type="PackedScene" path="res://src/entities/CustomerSpawner.tscn" id="3_spawner"]
+[ext_resource type="PackedScene" path="res://assets/kenney/commercial/building-a.glb" id="ken_bldg_a"]
+[ext_resource type="PackedScene" path="res://assets/kenney/commercial/building-b.glb" id="ken_bldg_b"]
+[ext_resource type="PackedScene" path="res://assets/kenney/commercial/building-d.glb" id="ken_bldg_d"]
+[ext_resource type="PackedScene" path="res://assets/kenney/commercial/detail-awning.glb" id="ken_awning"]
+[ext_resource type="PackedScene" path="res://assets/kenney/commercial/detail-awning-wide.glb" id="ken_awning_wide"]
+[ext_resource type="PackedScene" path="res://assets/kenney/commercial/detail-overhang.glb" id="ken_overhang"]
+[ext_resource type="PackedScene" path="res://assets/kenney/commercial/detail-parasol-a.glb" id="ken_parasol_a"]
+[ext_resource type="PackedScene" path="res://assets/kenney/commercial/detail-parasol-b.glb" id="ken_parasol_b"]
+[ext_resource type="PackedScene" path="res://assets/kenney/roads/road-straight.glb" id="ken_road"]
+[ext_resource type="PackedScene" path="res://assets/kenney/roads/road-sign-stop.glb" id="ken_sign_stop"]
 
-[node name="Pasar" instance=ExtResource("1_location")]
+[sub_resource type="StandardMaterial3D" id="1_ground_mat"]
+albedo_color = Color(0.42, 0.4, 0.36, 1)
+roughness = 0.95
+metallic = 0.0
+
+[sub_resource type="BoxMesh" id="2_ground_mesh"]
+size = Vector3(40.0, 0.4, 40.0)
+
+[sub_resource type="BoxShape3D" id="3_ground_shape"]
+size = Vector3(40.0, 0.4, 40.0)
+
+[node name="Location" type="Node3D"]
+script = ExtResource("1_location")
+spawn_offset = Vector3(0.0, 0.1, 2.6)
+
+[node name="StandSlot" type="Node3D" parent="."]
+
+[node name="Stand" parent="StandSlot" instance=ExtResource("2_stand")]
+
+[node name="CustomerSpawner" parent="." instance=ExtResource("3_spawner")]
+
+[node name="Props" type="Node3D" parent="."]
+
+[node name="Building_Left" parent="Props" instance=ExtResource("ken_bldg_a")]
+position = Vector3(-6.0, 0.0, -6.0)
+scale = Vector3(3.5, 4.5, 3.3)
+
+[node name="Building_Right" parent="Props" instance=ExtResource("ken_bldg_d")]
+position = Vector3(6.0, 0.0, -6.0)
+scale = Vector3(3.5, 4.5, 3.3)
+
+[node name="Building_Back" parent="Props" instance=ExtResource("ken_bldg_b")]
+position = Vector3(0.0, 0.0, -12.0)
+scale = Vector3(3.5, 4.5, 3.3)
+
+[node name="Awning_Left" parent="Props" instance=ExtResource("ken_awning")]
+position = Vector3(-6.0, 0.0, -3.2)
+scale = Vector3(2.5, 2.5, 2.5)
+
+[node name="Awning_Right" parent="Props" instance=ExtResource("ken_awning")]
+position = Vector3(6.0, 0.0, -3.2)
+scale = Vector3(2.5, 2.5, 2.5)
+
+[node name="Awning_Center" parent="Props" instance=ExtResource("ken_awning_wide")]
+position = Vector3(0.0, 0.0, -2.2)
+scale = Vector3(2.5, 2.5, 2.5)
+
+[node name="Overhang" parent="Props" instance=ExtResource("ken_overhang")]
+position = Vector3(0.0, 0.0, -4.2)
+scale = Vector3(2.5, 2.5, 2.5)
+
+[node name="Parasol_Left" parent="Props" instance=ExtResource("ken_parasol_a")]
+position = Vector3(-3.0, 0.0, -4.5)
+scale = Vector3(2.5, 2.5, 2.5)
+
+[node name="Parasol_Right" parent="Props" instance=ExtResource("ken_parasol_b")]
+position = Vector3(3.0, 0.0, -4.5)
+scale = Vector3(2.5, 2.5, 2.5)
+
+[node name="Road_A" parent="Props" instance=ExtResource("ken_road")]
+position = Vector3(-6.0, 0.0, -9.0)
+scale = Vector3(3.0, 1.0, 3.0)
+
+[node name="Road_B" parent="Props" instance=ExtResource("ken_road")]
+position = Vector3(-3.0, 0.0, -9.0)
+scale = Vector3(3.0, 1.0, 3.0)
+
+[node name="Road_C" parent="Props" instance=ExtResource("ken_road")]
+position = Vector3(0.0, 0.0, -9.0)
+scale = Vector3(3.0, 1.0, 3.0)
+
+[node name="Road_D" parent="Props" instance=ExtResource("ken_road")]
+position = Vector3(3.0, 0.0, -9.0)
+scale = Vector3(3.0, 1.0, 3.0)
+
+[node name="Road_E" parent="Props" instance=ExtResource("ken_road")]
+position = Vector3(6.0, 0.0, -9.0)
+scale = Vector3(3.0, 1.0, 3.0)
+
+[node name="SignStop" parent="Props" instance=ExtResource("ken_sign_stop")]
+position = Vector3(-8.0, 0.0, -9.0)
+scale = Vector3(2.0, 2.0, 2.0)
+
+[node name="Ground" type="StaticBody3D" parent="."]
+
+[node name="GroundShape" type="CollisionShape3D" parent="Ground"]
+shape = SubResource("3_ground_shape")
+position = Vector3(0.0, -0.2, 0.0)
+
+[node name="GroundMesh" type="MeshInstance3D" parent="Ground"]
+mesh = SubResource("2_ground_mesh")
+material_override = SubResource("1_ground_mat")
+position = Vector3(0.0, -0.2, 0.0)

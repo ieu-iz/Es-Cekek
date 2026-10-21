@@ -2,7 +2,8 @@
 .import/
 .godot/
 export.cfg
-export_presets.cfg
+# export_presets.cfg sengaja TIDAK di-ignore: preset export adalah bagian dari
+# project (dipakai Task 11 untuk build Windows/Linux/macOS/Android).
 
 # Builds
 build/

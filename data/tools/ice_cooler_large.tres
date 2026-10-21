@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="Tool" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/resources/Tool.gd" id="1_tool"]
+
+[resource]
+script = ExtResource("1_tool")
+slot = &"cooler"
+id = &"ice_cooler_large"
+display_name = "Tempat Es Besar"
+cost = 80000.0
+quality_mod = 1.2
+capacity_mod = 16.0
+unlock_day = 2
+is_upgrade = true
+description = "Cooler es besar. Kapasitas 16 sendok es, kualitas +20%."

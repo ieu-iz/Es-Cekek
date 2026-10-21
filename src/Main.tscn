@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://src/Main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://src/entities/Player.tscn" id="2_player"]
@@ -9,9 +9,12 @@ sky_horizon_color = Color(0.72, 0.8, 0.88, 1)
 ground_bottom_color = Color(0.28, 0.26, 0.24, 1)
 ground_horizon_color = Color(0.55, 0.53, 0.5, 1)
 
+[sub_resource type="Sky" id="Sky_res"]
+sky_material = SubResource("Sky_mat")
+
 [sub_resource type="Environment" id="Env_main"]
 background_mode = 2
-sky = SubResource("Sky_mat")
+sky = SubResource("Sky_res")
 ambient_light_source = 3
 ambient_light_color = Color(0.75, 0.78, 0.85, 1)
 ambient_light_energy = 0.6

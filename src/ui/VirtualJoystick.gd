@@ -1,8 +1,9 @@
 ## VirtualJoystick.gd
 # On-screen thumbstick for Android. Plan §Mobile-Specific Concerns.
 # Publishes a normalized vector to UILayer.move_vector.
-# Convention: x = right, y = UP (forward). The Player converts it to the
-# same convention as Input.get_vector (where y is positive = backward).
+# Convention (sama dengan Input.get_vector): x = +1 ke kanan, y = -1 ke atas
+# (maju). Koordinat layar punya y ke bawah, jadi "_value = delta / radius"
+# otomatis memberi y negatif saat digerakkan ke atas.
 extends Control
 
 ## Thumbstick travel radius in pixels.
@@ -91,11 +92,17 @@ func _publish() -> void:
 	# Publish via the parent UILayer node instead of the UILayer autoload:
 	# the autoload instantiates this scene, so referencing it here is circular.
 	var ui := _find_ui_layer()
-	if ui != null:
+	if ui == null:
+		return
+	if ui.has_method("set_move_vector"):
+		ui.call("set_move_vector", _value)
+	else:
 		ui.set("move_vector", _value)
 
 
 func _find_ui_layer() -> Node:
+	# Rantai parent: joystick -> UILayer.tscn root -> CanvasLayer -> autoload UILayer.
+	# Autoload-nya yang punya method `set_move_vector`.
 	var node := get_parent()
 	while node != null:
 		if node.has_method("set_move_vector"):
