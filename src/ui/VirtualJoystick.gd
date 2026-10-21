@@ -88,7 +88,20 @@ func _release() -> void:
 
 
 func _publish() -> void:
-	UILayer.move_vector = _value
+	# Publish via the parent UILayer node instead of the UILayer autoload:
+	# the autoload instantiates this scene, so referencing it here is circular.
+	var ui := _find_ui_layer()
+	if ui != null:
+		ui.set("move_vector", _value)
+
+
+func _find_ui_layer() -> Node:
+	var node := get_parent()
+	while node != null:
+		if node.has_method("set_move_vector"):
+			return node
+		node = node.get_parent()
+	return null
 
 
 func _draw() -> void:

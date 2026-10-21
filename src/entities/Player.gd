@@ -43,7 +43,7 @@ func _physics_process(delta: float) -> void:
 		input_dir = Vector2.ZERO
 
 	var target_speed := WALK_SPEED
-	if Input.is_action_pressed("run") if InputMap.has_action("run") else false:
+	if InputMap.has_action("run") and Input.is_action_pressed("run"):
 		target_speed = RUN_SPEED
 
 	var wish := Vector3(input_dir.x, 0.0, -input_dir.y) * target_speed

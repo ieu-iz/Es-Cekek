@@ -79,9 +79,13 @@ func load_location(world_root: Node3D, def: LocationDef) -> void:
 
 	# Ensure Player is positioned at the stand spawn point.
 	if root.has_method("stand_spawn_position"):
-		var player = get_tree().get_nodes_in_group("player").front()
-		if player != null and player is Node3D:
-			player.global_transform.origin = root.stand_spawn_position()
+		var players := get_tree().get_nodes_in_group("player")
+		if players.is_empty():
+			push_warning("LocationManager: tidak ada node dalam grup 'player'.")
+		else:
+			var player := players[0] as Node3D
+			if player != null:
+				player.global_transform.origin = root.stand_spawn_position()
 
 	UILayer.show_loading(false)
 	location_changed.emit(def)

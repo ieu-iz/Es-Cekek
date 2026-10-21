@@ -40,7 +40,8 @@ func _apply_palette() -> void:
 		mat.roughness = 0.95
 		ground.material_override = mat
 
-	# The world sky is owned by Main.tscn; tint the sun/ambient per location.
+	# The world sky + sun are owned by Main.tscn (persistent across loads).
+	# Tint the sun per location so the three maps read differently.
 	var sun := get_tree().get_first_node_in_group("sun") as DirectionalLight3D
 	if sun != null:
 		sun.light_color = accent.lerp(Color(1, 1, 1), 0.6)

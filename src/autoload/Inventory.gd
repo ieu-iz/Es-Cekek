@@ -8,10 +8,14 @@ signal stock_changed
 signal money_changed(new_money: float)
 signal tools_changed
 
-var money: float = 0.0:
+var _money: float = 0.0
+
+var money: float:
+	get:
+		return _money
 	set(v):
-		money = v
-		money_changed.emit(money)
+		_money = maxf(0.0, v)
+		money_changed.emit(_money)
 
 var sachet_stock: Dictionary = {}  # StringName -> int
 var ice_stock: int = 0
@@ -28,24 +32,22 @@ func grant_startup(tools: Array[Tool]) -> void:
 
 
 func can_afford(price: float) -> bool:
-	return money >= price
+	return _money >= price
 
 
 func deduct(price: float) -> bool:
-	if money < price:
+	if _money < price:
 		return false
-	money -= price
+	money = _money - price
 	return true
 
 
 func add_money(amount: float) -> void:
-	money += amount
-	money_changed.emit(money)
+	money = _money + amount
 
 
 func remove_money(amount: float) -> void:
-	money = maxf(0.0, money - amount)
-	money_changed.emit(money)
+	money = maxf(0.0, _money - amount)
 
 
 func add_sachets(brand_id: StringName, count: int) -> void:

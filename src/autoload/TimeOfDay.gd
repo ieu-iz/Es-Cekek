@@ -49,9 +49,9 @@ func elapsed_seconds() -> float:
 
 
 func _end_current_day() -> void:
-_running = false
-day_ended.emit(current_day)
-# current_day is incremented by Economy.end_day() to keep a single source of truth.
+	_running = false
+	day_ended.emit(current_day)
+	# current_day is incremented by Economy.end_day() to keep a single source of truth.
 
 
 func end_day_manual() -> void:

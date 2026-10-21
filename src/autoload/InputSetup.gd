@@ -20,25 +20,25 @@ func _ready() -> void:
 
 
 func _build() -> void:
-	_bind("move_forward", Key.W, Key.UP)
-	_bind("move_back", Key.S, Key.DOWN)
-	_bind("move_left", Key.A, Key.LEFT)
-	_bind("move_right", Key.D, Key.RIGHT)
-	_bind("interact", Key.E, Key.F)
-	_bind("travel", Key.TAB)
-	_bind("ui_accept", Key.ENTER, Key.KP_ENTER)
+	_bind("move_forward", Key.KEY_W, Key.KEY_UP)
+	_bind("move_back", Key.KEY_S, Key.KEY_DOWN)
+	_bind("move_left", Key.KEY_A, Key.KEY_LEFT)
+	_bind("move_right", Key.KEY_D, Key.KEY_RIGHT)
+	_bind("interact", Key.KEY_E, Key.KEY_F)
+	_bind("travel", Key.KEY_TAB)
+	_bind("ui_accept", Key.KEY_ENTER, Key.KEY_KP_ENTER)
 
 	# Prep pipeline: pour -> water -> stir -> ice -> straw -> serve
-	_bind("pour", Key.Q)
-	_bind("add_water", Key.R)
-	_bind("stir", Key.T)
-	_bind("add_ice", Key.G)
-	_bind("add_straw", Key.H)
-	_bind("serve", Key.F, Key.SPACE)
-	_bind("run", Key.SHIFT)
+	_bind("pour", Key.KEY_Q)
+	_bind("add_water", Key.KEY_R)
+	_bind("stir", Key.KEY_T)
+	_bind("add_ice", Key.KEY_G)
+	_bind("add_straw", Key.KEY_H)
+	_bind("serve", Key.KEY_F, Key.KEY_SPACE)
+	_bind("run", Key.KEY_SHIFT)
 
 
-func _bind(action: String, *keys: int) -> void:
+func _bind(action: String, ...keys) -> void:
 	if not InputMap.has_action(action):
 		InputMap.add_action(action)
 	for k in keys:

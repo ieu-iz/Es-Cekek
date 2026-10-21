@@ -13,12 +13,24 @@ config/features=PackedStringArray("4.3", "Mobile")
 
 [autoload]
 
-InputSetup = "res://src/autoload/InputSetup.gd"
-Inventory = "res://src/autoload/Inventory.gd"
-LocationManager = "res://src/autoload/LocationManager.gd"
-Economy = "res://src/autoload/Economy.gd"
-TimeOfDay = "res://src/autoload/TimeOfDay.gd"
-UILayer = "res://src/autoload/UILayer.gd"
+; The leading "*" marks the autoload as a GLOBAL IDENTIFIER (singleton), which is
+; what lets other scripts call e.g. `UILayer.show_loading(...)` directly.
+; Without the "*" the node is added to the tree but the name is not in scope.
+;
+; Order matters: Godot registers autoloads in this order, and a script may only
+; reference an autoload registered BEFORE it.
+;   InputSetup      -> no deps
+;   Inventory       -> no deps
+;   TimeOfDay       -> no deps
+;   UILayer         -> no deps
+;   LocationManager -> UILayer
+;   Economy         -> LocationManager, Inventory, UILayer
+InputSetup = "*res://src/autoload/InputSetup.gd"
+Inventory = "*res://src/autoload/Inventory.gd"
+TimeOfDay = "*res://src/autoload/TimeOfDay.gd"
+UILayer = "*res://src/autoload/UILayer.gd"
+LocationManager = "*res://src/autoload/LocationManager.gd"
+Economy = "*res://src/autoload/Economy.gd"
 
 [display]
 
