@@ -131,14 +131,39 @@ godot --headless --path . --export-debug   "Android"       build\android\EsCekek
 > *Editor Settings* → APK signed + `.idsig` tergenerate, dan tetap bisa di-*sideload*.
 
 #### 📱 Install APK di HP (Android)
+
+**⭐ Cara paling gampang — TANPA adb:**
+
+1. Di PC, salin `build\android\EsCekek.apk` ke HP:
+   - **Kabel USB** → di HP pilih mode **"File Transfer / MTP"** (bukan "Charge only"),
+     lalu copy file `EsCekek.apk` ke folder **Download** di HP.
+   - Atau kirim via **Google Drive / WhatsApp / Telegram / Email** (link Google Drive paling
+     aman untuk file 90 MB; WhatsApp kadang gagal untuk file >100 MB).
+2. Di HP buka **Files / My Files → Download → `EsCekek.apk`** → ketuk file-nya.
+3. Android akan minta izin: **Settings → Apps → Special app access → Install unknown apps**
+   → pilih aplikasi yang kamu pakai untuk membuka file (Files / Chrome / WhatsApp) → **Allow**.
+   (Android 8+; di bawah itu, cukup centang "Unknown sources" di Security.)
+4. Ketuk **Install** → tunggu → selesai. Aplikasi **"Es Cekek"** muncul di drawer.
+5. Kalau diminta, izinkan install dari sumber itu sekali saja. APK ini **signed** (debug key)
+   jadi tidak akan ditolak sebagai "app tidak terverifikasi".
+
+> **Catatan:** file `.idsig` (`EsCekek.apk.idsig`, 718 KB) **tidak perlu** dikirim ke HP —
+> itu hanya metadata untuk Play Store, bukan bagian dari aplikasi.
+
+**Alternatif — lewat adb (kalau HP sudah USB debugging):**
+
 1. Aktifkan **Developer options → USB debugging** di HP.
 2. Sambungkan HP via USB (atau `adb connect <ip:port>` untuk Wi-Fi).
 3. Cek perangkat terdeteksi: `adb devices`
 4. Install: `adb install -r build\android\EsCekek.apk`
 5. Luncurkan: `adb shell monkey -p com.escekek.game 1`
 
+> `adb` di PC ini ada di `C:\Users\WIN10\AppData\Local\Android\Sdk\platform-tools\adb.exe`
+> (belum ada di PATH). Pakai full path kalau `adb` tidak ketemu.
+
 > APK sudah signed (debug key), package `com.escekek.game`, minSdk 24 (Android 7.0),
 > targetSdk 36, dukungan `arm64-v8a` + `armeabi-v7a` + `x86_64`.
+> Kalau di HP sudah ada versi Es Cekek dari signature berbeda → **uninstall dulu** lalu install ulang.
 
 ---
 
@@ -156,7 +181,7 @@ godot --headless --path . --export-debug   "Android"       build\android\EsCekek
 ### ⚠️ Yang belum selesai (jujur)
 | Item | Status |
 |---|---|
-| APK belum diinstall & diuji di HP asli (Task 11 QA) | APK sudah jadi (`build/android/EsCekek.apk`) — tinggal pasang HP + `adb install` |
+| APK belum diinstall & diuji di HP asli (Task 11 QA) | APK sudah jadi (`build/android/EsCekek.apk`, 89,8 MB, **signed**) — tinggal salin ke HP + install dari file manager (tanpa adb) |
 | Voice keluhan pelanggan | Belum ada (bubble teks 3D + bunyi `complain` sudah ada) |
 | VFX (siram/aduk/es beradu) | Belum ada |
 | Warna lokasi berbeda | Partially (tint matahari per lokasi sudah ada) |
