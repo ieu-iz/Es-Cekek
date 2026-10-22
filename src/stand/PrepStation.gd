@@ -1,12 +1,13 @@
 ## PrepStation.gd
-# Plan §Data Flow step 3 + Task 6: the prep pipeline.
+# Task 15 — "mesin resep" (state machine) untuk pembuatan es cekek.
 #
-#   select brand -> pour (volume) -> add_water -> stir -> add_ice -> add_straw
-#   -> build Bag
+# Dulu pipeline ini dipanggil dari tombol panel 2D. Sekarang setiap langkah
+# dipicu oleh FISIKA: dua objek yang brought bersama (lihat `RecipeRules.gd`),
+# jadi tidak ada tombol untuk brand/volume/air/aduk/es/sedotan lagi.
 #
-# There is NO minigame. Quality comes from how correct the steps were:
-#   prep_quality = round(brand.base_quality * step_score * tool_mod * 100)
+#   potong sachet -> serbuk ke plastik -> air -> aduk -> es (serok) -> sedotan
 #
+# Quality = brand.base_quality * step_score * tool_mod * 100 (tidak berubah).
 # Ingredients are consumed when the bag is BUILT (Implementer Decision #1),
 # not when it is sold — so a wrong-brand refusal still wastes them.
 class_name PrepStation
@@ -41,6 +42,14 @@ const W_STIR: float = 0.20
 const W_ICE: float = 0.25
 const W_STRAW: float = 0.10
 
+## Task 15 — urutan langkah yang WAJIB diikuti (resep realistis).
+## Langkah yang salah urutan tetap dihitung, tapi dikurangi penalti.
+const STEP_ORDER: Array[StringName] = [
+	&"cut", &"pour_powder", &"pour_water", &"stir", &"add_ice", &"add_straw",
+]
+## Penalti quality per langkah yang salah urutan.
+const OUT_OF_ORDER_PENALTY: float = 0.70
+
 ## Brands available on the rack (filled from the Catalog at runtime).
 var rack: Array[SachetBrand] = []
 
@@ -52,6 +61,13 @@ var has_stir: bool = false
 var ice_amount: int = 0
 var has_straw: bool = false
 var current_bag: Bag = null
+
+## Riwayat langkah yang sudah dilakukan (urutan pemakaiannya).
+var step_history: Array[StringName] = []
+## Berapa langkah yang dilakukan dengan urutan salah.
+var out_of_order_count: int = 0
+## Wadah plastik yang sedang diisi (objek fisik di meja).
+var vessel: PrepObject = null
 
 var _equipment: StandEquipment = null
 
@@ -116,6 +132,9 @@ func reset() -> void:
 	ice_amount = 0
 	has_straw = false
 	current_bag = null
+	step_history.clear()
+	out_of_order_count = 0
+	vessel = null
 
 
 func select_brand(brand: SachetBrand) -> void:
@@ -165,6 +184,63 @@ func add_straw() -> void:
 	prep_changed.emit()
 
 
+# --- Resep (Task 15) -----------------------------------------------------
+
+## Catat langkah yang sudah dilakukan. Kalau langkahnya mendahului langkah
+## wajib berikutnya, itu dihitung sebagai "salah urutan" (penalti quality).
+## Mengembalikan true kalau ini langkah baru.
+func record_step(step: StringName) -> bool:
+	if step_history.has(step):
+		return false
+	var expected := expected_next_step()
+	if step != expected:
+		out_of_order_count += 1
+	step_history.append(step)
+	prep_changed.emit()
+	return true
+
+
+## Apakah langkah ini sudah dilakukan?
+func has_step(step: StringName) -> bool:
+	return step_history.has(step)
+
+
+## Langkah wajib berikutnya (kalau semua sudah, hasilnya kosong).
+func expected_next_step() -> StringName:
+	for s in STEP_ORDER:
+		if not step_history.has(s):
+			return s
+	return &""
+
+
+## Apakah resepnya sudah lengkap (semua bahan ada)?
+func is_complete() -> bool:
+	return volume > 0.0 and has_water and has_stir and ice_amount > 0 and has_straw
+
+
+## Daftar yang masih kurang — dipakai sebagai komplain pelanggan.
+func missing_steps() -> Array[String]:
+	var out: Array[String] = []
+	if selected_brand == null:
+		out.append("Belum ambil sachet!")
+	if volume <= 0.0:
+		out.append("Belum ada serbub sachet!")
+	if not has_water:
+		out.append("Belum dikasih air!")
+	if not has_stir:
+		out.append("Belum diaduk!")
+	if ice_amount <= 0:
+		out.append("Belum ada es!")
+	if not has_straw:
+		out.append("Belum ada sedotannya!")
+	return out
+
+
+## Set wadah plastik yang sedang diisi.
+func set_vessel(obj: PrepObject) -> void:
+	vessel = obj
+
+
 # --- Scoring -------------------------------------------------------------
 
 ## Weighted correctness of the steps, 0..1.
@@ -190,6 +266,10 @@ func step_score() -> float:
 
 	if has_straw:
 		score += W_STRAW
+
+	# Langkah salah urutan mengurangi kualitas.
+	if out_of_order_count > 0:
+		score *= pow(OUT_OF_ORDER_PENALTY, float(out_of_order_count))
 
 	return clampf(score, 0.0, 1.0)
 
@@ -269,4 +349,8 @@ func snapshot() -> Dictionary:
 		"cost": estimated_cost(),
 		"ice_capacity": ice_capacity(),
 		"can_build": can_build(),
+		"complete": is_complete(),
+		"steps_done": step_history.size(),
+		"out_of_order": out_of_order_count,
+		"missing": missing_steps(),
 	}

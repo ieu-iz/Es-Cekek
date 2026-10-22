@@ -47,7 +47,6 @@ func _ready() -> void:
 
 	LocationManager.set_locations(location_defs)
 	UILayer.set_locations(location_defs)
-	UILayer.refresh_prep_brands()
 	_setup_inventory()
 	_wire_signals()
 

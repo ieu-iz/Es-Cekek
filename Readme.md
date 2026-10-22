@@ -7,7 +7,7 @@
 **Es Cekek** adalah game simulasi 3D bertema kuliner jalanan khas Indonesia. Pemain berperan sebagai pedagang es kantong plastik (es rendengan/es cekek) yang berkeliling menjajakan es sachet di berbagai lokasi ikonik seperti Pasar, Sekolah, dan Pemukiman Warga.
 
 > ✅ **Status Proyek: MVP v1 — GAMEPLAY LENGKAP, BISA DIMAINKAN, SUDAH DI-BUILD.**
-> Seluruh core loop sudah jadi dan **teruji otomatis 246/246 asersi hijau** + game berhasil boot tanpa error.
+> Seluruh core loop sudah jadi dan **teruji otomatis 346/346 asersi hijau** + game berhasil boot tanpa error.
 > **Build sudah tersedia untuk 4 platform**: Windows `.exe`, Linux, macOS `.zip`, dan Android `.apk`.
 > Yang belum ada hanya polesan visual/voice akhir dan QA APK di HP asli.
 > Cara memainkan: buka `project.godot` di Godot 4.7.2 lalu tekan **F5**. Detail lengkap di bawah.
@@ -21,19 +21,36 @@ Di game ini, kualitas es yang kamu sajikan ditentukan oleh ketepatan racikan, pe
 ### 🔄 Siklus Utama Jualan (Core Loop)
 1. **Pilih Lokasi & Buka Stand:** Berkeliling di area **Pasar**, **Sekolah**, atau **Rumah**.
 2. **Terima Pesanan:** Dengarkan teriakan pesanan dari pelanggan yang datang.
-3. **Racik Es Cekek:**
-   - 📦 Pilih sachet yang sesuai (Tejus, Marimas, Jasjus, Frenta).
-   - 💧 Tuang sachet & tambahkan air.
-   - 🥄 Aduk racikan hingga larut sempurna.
-   - 🧊 Tambahkan es batu sesuai porsi.
-   - 🥤 Pasang sedotan & ikat kantong plastik!
-4. **Atur Harga & Sajikan:** Tentukan harga jual ideal agar pelanggan tidak protes (*"Mahal amat!"*) dan beri pelayanan cepat sebelum pelanggan kesal.
-5. **Manajemen Ekonomi & Toko:** Bayar sewa tempat harian, rekap keuntungan, lalu upgrade peralatan jualan seperti dispenser air, mixer otomatis, hingga cooler es batu yang lebih besar.
+3. **Racik Es Cekek — first-person dengan dua tangan:** berdiri di depan meja → view berubah jadi
+   **first-person**, tangan kiri & kanan tampil di layar. **Tidak ada tombol menu** — semua
+   langkah dilakukan dengan **drag objek 3D** di meja:
+   - ✂️ Tangan kiri pegang **sachet** (Tejus/Marimas/Jasjus/Frenta), tangan kanan pegang **gunting**
+     → **potong sachet** (brand ikut terpotong & otomatis dipilih).
+   - 🛍️ Tangan yang bebas mengambil **plastik** → serbub sachet **dimasukkan ke plastik**.
+   - 💧 **Jerigen air** → tuang air ke plastik.
+   - 🥄 **Sendok** → aduk sampai larut.
+   - 🧊 **Serok** ke **cooler es** → serok terisi → masukkan es ke plastik.
+   - 🥤 **Sedotan** → pasang di plastik.
+   - ⚠️ Urutan itu **wajib** — langkah salah urutan menurunkan kualitas racikan.
+   - 🤚 Objek yang dekat dengan **tangan kanan** diambil tangan kanan, dekat tangan kiri → tangan
+     kiri. `Q` menukar isi kedua tangan.
+4. **Reaksi Pelanggan:** kalau esnya **belum siap**, pelanggan **komplain** persis apa yang kurang
+   (*"Kurang: Belum ada es!, Belum dikasih air!, …"*). Kalau **sudah siap**, pelanggan
+   **mengambil tasnya sendiri** — tinggal atur harga lalu sajikan.
+5. **Atur Harga & Sajikan:** Tentukan harga jual ideal agar pelanggan tidak protes (*"Mahal amat!"*) dan beri pelayanan cepat sebelum pelanggan kesal.
+6. **Manajemen Ekonomi & Toko:** Bayar sewa tempat harian, rekap keuntungan, lalu upgrade peralatan jualan seperti dispenser air, mixer otomatis, hingga cooler es batu yang lebih besar.
 
 ---
 
 ## ✨ Fitur Utama
 
+- 🧤 **Racik First-Person dengan Dua Tangan:** view berubah jadi first-person saat di meja; objek
+  sungguhan (4 sachet, gunting, tumpukan plastik, jerigen air, cooler es + serok, sendok, sedotan)
+  diambil & digeser dengan mouse. Panel tombol racik yang lama **dihapus total** — digantikan HUD
+  minimal (harga + status pesanan + tombol *Serahkan*).
+- 📱 **Kontrol Layar Sentuh yang Lengkap:** mouse dan multi-jari berbagi satu mesin state pointer —
+  1 jari di objek = ambil, 1/2 jari di area kosong = melihat, geser jari = objek ikut bergerak,
+  plus tombol layar **Tukar Tangan** & **Putar Badan** untuk yang tidak punya keyboard.
 - 🏢 **3 Lokasi Unik:** Pasar (ramai, sewa tinggi), Sekolah (sedang), dan Rumah (santai, sewa murah).
 - 🍹 **4 Merek Sachet Khas:** Mulai dari sachet hemat Rp 1.000 hingga sachet premium Rp 5.000.
 - 🛠️ **Sistem Equipment & Upgrade Toko:** Meja jualan, gantungan sachet, dispenser air, es cooler kecil/besar, dan mixer.
@@ -50,7 +67,7 @@ Di game ini, kualitas es yang kamu sajikan ditentukan oleh ketepatan racikan, pe
 - **Engine:** Godot Engine 4.7.2 (GDScript)
 - **Renderer:** Mobile (Vulkan/D3D12) di desktop, otomatis turun ke **Compatibility (OpenGL 3.3)** bila GPU tidak mendukung; Android dipaksa `gl_compatibility` (GLES3) agar HP tua tetap bisa jalan.
 - **Target Platform:** Windows, macOS, Linux, Android (APK) — preset export di `export_presets.cfg`, **build ke-4 platform sudah dibuat** (`build/`).
-- **Automated Testing:** Suite pengujian otomatis berbasis headless scene dengan **246 asersi** (semua hijau).
+- **Automated Testing:** Suite pengujian otomatis berbasis headless scene dengan **346 asersi** (semua hijau).
 - **Aset 3D:** **197 mesh CC0 (Kenney)** di `assets/kenney/` — karakter (mini-characters), gedung/toko,
   rumah & pohon, jalan, perabot warung, dan makanan. Gaya low-poly yang konsisten.
   Unduh & subset dilakukan oleh `scripts/prepare_kenney_assets.ps1`.
@@ -73,24 +90,44 @@ Di game ini, kualitas es yang kamu sajikan ditentukan oleh ketepatan racikan, pe
 3. Tunggu proses import selesai (membuat folder `.godot/`).
 
 ### Cara MAIN (paling cepat)
-Tekan **F5** (atau tombol ▶ Play) di editor. Scene utama = `res://src/Main.tscn`.
+
+**Opsi A — klik ganda `run.bat` (tanpa perlu build sama sekali):**
+
+```cmd
+run.bat            :: main game langsung dari source code
+run.bat --editor   :: buka Godot Editor
+run.bat --test     :: smoke test + boot check (headless)
+run.bat --build    :: export 4 platform sekaligus (Windows/Linux/macOS/Android)
+run.bat --headless :: game tanpa jendela
+```
+
+`run.bat` mencari binary Godot sendiri di `%LOCALAPPDATA%\Godot\`. Kalau Godot ada di tempat
+lain, set env var dulu: `set GODOT=C:\path\to\Godot.exe`.
+
+**Opsi B — dari editor:** tekan **F5** (atau tombol ▶ Play). Scene utama = `res://src/Main.tscn`.
 
 ### Kontrol
 
 | Aksi | Desktop | Sentuh (Android) |
 |---|---|---|
 | Jalan | `W A S D` / panah | Virtual joystick kiri-bawah |
-| Interaksi (buka stand / prep panel) | `E` atau `Space` | Tombol **INTERAKSI** |
-| Tuang sachet / air / aduk / es / sedotan | `E` atau tombol panel prep | Tombol panel prep (kanan) |
-| Sajikan | `E` / tombol **SAJIKAN** | Tombol **SAJIKAN** |
-| Ber Traveling antar lokasi | Panel lokasi / `T` | Panel lokasi |
+| Interaksi (buka stand → mode racik) | `E` atau `F` | Tombol **INTERAKSI** |
+| Lihat sekeliling (mode racik) | Gerak mouse — pitch ±35°, yaw ±60° | Geser **1 jari di area kosong** atau **2 jari** |
+| Ambil objek | Klik-kiri **tahan** di objek | **1 jari di objek** |
+| Tangan yang dipakai | Otomatis **tangan terdekat**; `Q` = tukar tangan | Otomatis tangan terdekat; tombol layar **Tukar Tangan** |
+| Geser objek | Tahan klik-kiri lalu gerakkan | Seret 1 jari (objek ikut, pandangan diam) |
+| Letakkan objek | Lepas klik (jatuh di meja) / klik-kanan | Lepas jari |
+| Putar badan 180° | `R` | Tombol layar **Putar Badan** |
+| Sajikan (tas sudah jadi) | Tombol **Serahkan** di HUD racik | Tombol **Serahkan** di HUD racik |
+| Keluar dari mode racik | `Esc` / tombol **Keluar** | Tombol **Keluar** |
+| Ber Traveling antar lokasi | Panel lokasi / `Tab` | Panel lokasi |
 | Atur harga | Slider harga (desktop) / tombol `−` `+` | Tombol `−` `+` (Rp 500 per langkah) |
 
 ### Menjalankan Automated Smoke Tests (headless — tanpa jendela)
 Seluruh pengujian berjalan **headless** (tidak memunculkan window):
 
 ```cmd
-scripts\run_tests.cmd         # Unit & integration test (246 asersi)
+scripts\run_tests.cmd         # Unit & integration test (346 asersi)
 scripts\run_tests.cmd --boot  # Tes jalan + boot game headless selama 120 frame
 ```
 
@@ -176,6 +213,11 @@ godot --headless --path . --export-debug   "Android"       build\android\EsCekek
 - [x] **Phase 5: Audio** (Procedural SFX Tuang/Aduk/Es/Kasir + Music Loop ambient)
 - [x] **Phase 6: Export & Build** (4 preset + export template + build Windows/Linux/macOS/Android; `.exe` & `.apk` terverifikasi)
 - [x] **Phase 6.5: Art 3D** (asset Kenney CC0: karakter, 3 lokasi, perabot warung)
+- [x] **Phase 6.6: First-Person Hands** (panel prep lama dibongkar total; racik manual dengan
+      drag objek 3D & dua tangan; pelanggan komplain kalau belum siap, ambil sendiri kalau siap)
+- [x] **Phase 6.7: Kontrol Layar Sentuh** (mouse + multi-jari berbagi satu mesin state pointer;
+      1 jari di objek = ambil, 1/2 jari di area kosong = lihat; tombol layar **Tukar Tangan** &
+      **Putar Badan**; 346 asersi hijau)
 - [ ] **Phase 7: Polish & Release** (voice keluhan, VFX, warna lokasi, QA APK di perangkat asli)
 
 ### ⚠️ Yang belum selesai (jujur)
@@ -187,6 +229,8 @@ godot --headless --path . --export-debug   "Android"       build\android\EsCekek
 | Warna lokasi berbeda | Partially (tint matahari per lokasi sudah ada) |
 | `assets/` (art CC0) | ✅ Selesai — 197 mesh Kenney CC0 (karakter, lokasi, propsi stand) |
 | Visual belum pernah dinilai mata di editor | GPU PC ini jatuh ke renderer Compatibility/OpenGL — perlu eyeball di editor |
+| Kontrol sentuh untuk mode racik first-person | ✅ **Selesai (Task 16)** — mouse + multi-jari satu mesin state pointer, takeover mouse-tiruan ↔ jari, tombol layar **Tukar Tangan**/**Putar Badan**, 346 asersi hijau. Yang tersisa: **feel-nya** dinilai manual di HP (lihat `todo.md` → "✍️ TUGAS MANUAL") |
+| Build di `build/` | ⚠️ Build terakhir masih versi **Task 15** — Task 16 belum di-ekspor ulang. Jalankan `run.bat --build` sebelum mengirim APK ke HP |
 
 ---
 

@@ -25,7 +25,59 @@ At the end of EVERY session that touches code:
 
 ## 🔄 In Progress
 
-> Tidak ada task yang sedang dikerjakan. Task berikutnya ada di **Pending** di bawah.
+> Task 16 (kontrol layar sentuh first-person) **selesai di T16–T17** — 346/346 hijau.
+> Sekarang ada **T18: QA perangkat = TUGAS MANUAL** (user yang menguji & memberi verdict),
+> lalu **T19: commit ke git**.
+
+---
+
+## ✍️ TUGAS MANUAL — User (T18): tes kontrol sentuh di perangkat
+
+> Sesuai permintaan user: *"untuk test test device jadiakan dia task manual alias biar aku
+> yang input sudah benar atau belum"*. Kode + asersi otomatis sudah hijau; yang tersisa
+> adalah **rasa** (feel) — hanya bisa dinilai di HP.
+
+### Cara menjalankan
+
+1. `run.bat --build` (|Windows/Linux/macOS/Android) → `build/android/EsCekek.apk`.
+   **Belum** di-build ulang sejak Task 16 — build yang ada masih versi Task 15.
+2. Salin `build\android\EsCekek.apk` ke HP → ketuk di file manager → install
+   (tidak butuh adb; lihat `Readme.md`).
+   Alternatif tanpa export: `run.bat` di PC + **Godot Editor "Deploy to Android Device"**.
+3. Masuk ke game → dekati meja → tekan **INTERACT** → mode first-person aktif.
+
+### Yang perlu dicoba (isi hasilnya di bawah)
+
+| # | Yang dites | Rahman | Catatan |
+|---|---|---|---|
+| M1 | **1 jari di objek** → objek terpegang tangan terdekat (kanan/kanan, kiri/kiri) | ☐ | |
+| M2 | **1 jari di area kosong** → kamera bisa lihat kiri/kanan/atas/bawah | ☐ | |
+| M3 | **2 jari** → tetap melihat, tidak mengambil objek | ☐ | |
+| M4 | **Geser jari** saat objek dipegang → objek ikut bergerak | ☐ | |
+| M5 | **Lepas di meja** → objek ditaruh di meja | ☐ | |
+| M6 | **Tombol "Tukar Tangan"** → isi kedua tangan bertukar | ☐ | |
+| M7 | **Tombol "Putar Badan"** → badan berputar 180° | ☐ | |
+| M8 | **2 objek berdekatan** → langkah resep jalan (gunting+sachet, dsb) | ☐ | |
+| M9 | Kecepatan & jangkauan look di layar sentuh | ☐ | |
+| M10 | Ukuran tombol TUKAR/PUTAR terjangkau jari (≥ 48 dp) | ☐ | |
+
+**Verdict user (isi sendiri):** _______________________________________________
+
+**Kalau ada yang terasa salah, tulis di sini + how-to-reproduce:**
+
+```
+-
+```
+
+### Knob tuning yang bisa diubah kalau feel-nya kurang pas
+
+| Parameter | Lokasi | Default | Efek |
+|---|---|---|---|
+| `Player.TOUCH_LOOK_SENS_SCALE` | `src/entities/Player.gd` | 1.0 | pengali sensitivitas look sentuh |
+| `Player.TOUCH_MOUSE_SLOP` | `src/entities/Player.gd` | 48.0 | toleransi takeover mouse-tiruan ↔ jari (px) |
+| `Player.PREP_START_PITCH` | `src/entities/Player.gd` | -25° | kemiringan pandang awal di meja |
+| `Player.PREP_STAND_OFFSET` | `src/entities/Player.gd` | 1.5 | jarak pemain dari konter |
+| `Player.LOOK_SENS` | `src/entities/Player.gd` | 0.22 | sensitivitas look (mouse + sentuh) |
 
 ---
 
@@ -48,6 +100,9 @@ At the end of EVERY session that touches code:
 - [x] Periksa `VirtualJoystick` benar-benar menggerakkan pemain → ✅ bug diperbaiki (Task 11c) + 8 asersi regresi
 - [ ] **Android: install `EsCekek.apk` di HP asli** → `adb devices` kosong, butuh perangkat tersambung
 - [ ] Android: cek joystick + tombol prep + UI di ~1080×2340 & ~2560×1600 (menunggu perangkat)
+- [x] **Task 14 — re-export 4 build** setelah Task 15 (Windows/Linux/macOS/Android) → ✅ via
+      `run.bat --build` (2026-10-22): `EsCekek.exe` 109,1 MB (boot bersih), `EsCekek.x86_64` 73,5 MB,
+      `EsCekek.zip` 62,9 MB, `EsCekek.apk` 89,8 MB **signed** (`--export-debug`, lihat gotcha #21)
 
 ### Polish (sisa Task 12)
 
@@ -67,6 +122,70 @@ At the end of EVERY session that touches code:
 ---
 
 ## Done
+
+### ✅ Task 16 — Kontrol layar sentuh mode first-person
+
+> Permintaan user: *"oke buat aja dulu ktrol layart sentuhnya … untuk feelnya bisa tunggu
+> instruksi dariku aja buat iterasi, dan untuk test test device jadikan dia task manual"*.
+
+- [x] **T16a — `project.godot`**: emulasi input dibenahi —
+      `pointing/emulate_touch_from_mouse=false` + `emulate_mouse_from_touch=true`
+      (sebelumnya `true` membuat event tiba dobel → grab terputus)
+- [x] **T16b — `src/entities/Player.gd`**: satu mesin state pointer
+      `handle_prep_pointer(event)` untuk mouse + multi-jari (1 jari objek = ambil,
+      1/2 jari area kosong = lihat, takeover mouse-tiruan ↔ jari, `TOUCH_MOUSE_SLOP` 48 px)
+- [x] **T16c — `src/prep/PrepController.gd`**: API pointer eksplisit
+      (`begin_drag_at` / `set_pointer` / `end_drag_at`) — controller tidak lagi baca
+      event input sendiri
+- [x] **T16d — `src/autoload/UILayer.gd`**: tombol layar **"Tukar Tangan"** (pengganti `Q`)
+      & **"Putar Badan"** (pengganti `R`) lewat sinyal `prep_action`
+      (`ACTION_SWAP_HAND` / `ACTION_TURN_BODY`); joystick disembunyikan saat mode prep
+- [x] **T16e — fix geometri kamera** (bug nyata, bukan cuma test): `PREP_STAND_OFFSET`
+      1,05 → 1,5, konstanta baru `PREP_START_PITCH = -25°`, `PrepController.REACH`
+      1,30 → 2,2. Sebelum: **seluruh meja di luar layar** dan tidak bisa di-drag
+- [x] **T16f — `tests/runtime_test.gd`**: `_test_task16()` 8 blok asersi (A–H) +
+      helper `_find_pick_point()` / `_find_empty_point()` / `_restore_prep_state()`
+      (koordinat layar dicari dinamis, tidak hardcode)
+- [x] **T17 — suite hijau**: `scripts\run_tests.cmd` → **346/346 lolos, 0 gagal**
+- [x] **T18a — alat ukur sementara dihapus**: `tools/input_probe.gd` + `tools/input_probe.tscn`
+- [ ] **T18b — QA perangkat** → **TUGAS MANUAL user** (lihat bagian
+      "✍️ TUGAS MANUAL — User (T18)" di atas)
+- [ ] **T19 — commit ke git**
+
+### ✅ Task 15 — First-person hands: racik es manual dengan dua tangan
+
+> Rencana lengkap: [`plans/task-15-first-person-hands.md`](plans/task-15-first-person-hands.md).
+> Keputusan user: **panel prep lama dihapus total**, semua langkah es lewat drag objek 3D.
+
+- [x] **T1 — `src/prep/PrepObject.gd` + `src/prep/Hand.gd`**: 8 jenis objek meja
+      (sachet/gunting/plastik/jerigen/cooler/serok/sendok/sedotan), `PICK_LAYER 2`,
+      satu tangan = satu objek, enum `HandSide` (bukan `Side` — bentrok dengan tipe engine)
+- [x] **T2 — `src/entities/Player.tscn` + `Player.gd`**: `PrepRig` (`top_level = true`) berisi
+      `Camera3D` + `LeftHand`/`RightHand`, `PrepController`; state baru `PREP`; look pitch ±35° /
+      yaw ±60°, badan bisa diputar 180° dengan `R`
+- [x] **T3 — `src/prep/PrepController.gd`**: ray-pick objek, **tangan terdekat menang**,
+      drag, `Q` tukar tangan, serah-terima ke pelanggan
+- [x] **T4 — `src/stand/PrepStation.tscn`**: meja fisik — 4 sachet (1 per brand) + gunting +
+      tumpukan plastik + jerigen air + cooler es + serok + sendok aduk + sedotan
+- [x] **T5 — `src/prep/RecipeRules.gd`**: 7 pemicu langkah —
+      `cut → pour_powder → pour_water → stir → fill_scoop → add_ice → add_straw`
+- [x] **T6 — `src/stand/PrepStation.gd`**: mesin state resep — `step_history`,
+      `out_of_order_count`, `missing_steps()`, `step_score()` (penalti `OUT_OF_ORDER_PENALTY 0.70`)
+- [x] **T7 — `src/stand/Stand.gd`**: wiring sesi prep ↔ stand + `pickup_position()`
+- [x] **T8 — `src/entities/Customer.gd`**: `complain_missing()` → `"Kurang: …"`,
+      `come_to_counter()` supaya pelanggan bisa **mengambil tas sendiri**
+- [x] **T9 — `src/autoload/UILayer.gd`**: **panel prep lama dibongkar total**; HUD minimal
+      (harga + status pesanan + tombol **Serahkan**)
+- [x] **T10 — `src/autoload/InputSetup.gd`**: `swap_hand` (Q), `prep_exit` (E/Esc),
+      `turn_body` (R); binding langkah lama dihapus
+- [x] **T11 — `tests/runtime_test.gd`**: `_test_task15()` 12 blok asersi (A–L) + revisi
+      asersi lama (panel prep)
+- [x] **T12 — `scripts\run_tests.cmd --boot`** → **314/314 hijau, 0 gagal, boot bersih**
+- [x] **T13 — dokumentasi sinkron**: `context.md` (indeks file + `src/prep/`, alur penjualan,
+      scene tree, parameter tuning, test status, known issues, recent changes), `todo.md`,
+      `Readme.md`
+- [x] **T14 — re-export 4 build** → `run.bat --build` (semua preset sukses, `.exe` boot bersih,
+      `.apk` signed)
 
 ### ✅ Task 12c–12f — Asset 3D Kenney CC0 (karakter, lokasi, propsi stand) + re-export
 
@@ -263,6 +382,22 @@ At the end of EVERY session that touches code:
 - [x] ~~Gaya install Android selalu harus `adb install`~~ — **DIPERBAIKI**: `Readme.md`
       sekarang punya bagian **"Cara paling gampang — TANPA adb"** (copy via USB MTP / Drive /
       WhatsApp → ketuk `.apk` di HP → izinkan "Install unknown apps"). `.idsig` tidak perlu dikirim.
+- [ ] Mode prep first-person (Task 15) **baru diverifikasi lewat asersi headless** — belum pernah
+      dilihat mata di editor: posisi mesh gunting/serok/sendok, jangkauan `Hand.reach_radius`
+      (0,45 m), dan jarak plumpeng antarobjek mungkin perlu taste pass
+- [x] ~~Build di `build/` masih versi panel prep lama~~ — **DIPERBAIKI** (T14, 2026-10-22):
+      4 build di-ekspor ulang via `run.bat --build` → Windows/Linux/macOS/Android,
+      `.exe` boot bersih, `.apk` signed
+- [x] ~~Kontrol sentuh mode racik first-person **masih setengah jadi**~~ — **DIPERBAIKI (Task 16)**:
+      satu mesin state pointer (`Player.handle_prep_pointer`) untuk mouse + multi-jari,
+      takeover mouse-tiruan ↔ jari, tombol layar **Tukar Tangan**/**Putar Badan**.
+      Suite **346/346**
+- [ ] **"Feel" kontrol sentuh belum dinilai** — semua Task 16 diverifikasi lewat asersi
+      headless. Sesuai permintaan user, tes device jadi **TUGAS MANUAL** (lihat bagian
+      "✍️ TUGAS MANUAL — User (T18)"). Knob tuning: `TOUCH_LOOK_SENS_SCALE`,
+      `TOUCH_MOUSE_SLOP`, `PREP_START_PITCH`
+- [ ] **Build 4 target masih versi Task 15** — Task 16 belum di-ekspor ulang; perlu
+      `run.bat --build` sebelum APK dikirim ke HP
 
 ---
 
@@ -270,6 +405,9 @@ At the end of EVERY session that touches code:
 
 | Date | Session | Changes | Test result |
 |---|---|---|---|
+| 2026-10-22 | Task 16 — kontrol layar sentuh first-person | **Satu mesin state pointer** di `Player.handle_prep_pointer()` untuk mouse + multi-jari (1 jari objek = ambil, 1/2 jari area kosong = lihat, takeover mouse-tiruan ↔ jari via `TOUCH_MOUSE_SLOP`); **emulasi input dibenahi** (`emulate_touch_from_mouse=false` + `emulate_mouse_from_touch=true` → event tidak dobel); **API pointer eksplisit** di `PrepController` (`begin_drag_at`/`set_pointer`/`end_drag_at`); **tombol layar "Tukar Tangan" & "Putar Badan"** (`UILayer.prep_action`); **fix geometri kamera** (`PREP_STAND_OFFSET` 1,05→1,5, `PREP_START_PITCH` -25° baru, `REACH` 1,30→2,2 — sebelumnya **seluruh meja di luar layar** dan tidak bisa di-drag); `_test_task16()` 8 blok asersi + helper cari koordinat dinamis; **gotcha baru #22** (ray-pick baca state fisika frame sebelumnya → butuh 1 `physics_frame` setelah `reparent`); probe `tools/input_probe.*` dihapus; `todo.md` dapat bagian **✍️ TUGAS MANUAL (T18)** untuk user | 346/346 ✅ 0 gagal |
+| 2026-10-22 | `run.bat` — main game dari source tanpa export | File baru `run.bat` di root project: auto-deteksi binary Godot (`%LOCALAPPDATA%\Godot\`, bisa di-override dgn env `GODOT`), mode `play` (default, main scene dari source — **tanpa export/build**), `--editor`, `--test` (smoke test + boot check), `--build` (export 4 platform sekaligus: `--export-release` ×3 + `--export-debug` Android), `--headless`, `--help`; argumen lain diteruskan ke Godot; `pause` di akhir. Docs (`context.md` §3.1, `todo.md`, `Readme.md`) disinkronkan | 314/314 ✅ boot OK (`run.bat --test`) |
+| 2026-10-22 | Task 15 — first-person hands | **Panel prep lama dihapus total** (`UILayer` → HUD minimal: harga + status pesanan + tombol **Serahkan**). **Baru**: `src/prep/` (`PrepObject.gd`, `Hand.gd`, `PrepController.gd`, `RecipeRules.gd`); `Player.tscn` dapat `PrepRig` (kamera + 2 `Hand`) + `PrepController` dan state `PREP`; `PrepStation.tscn` jadi meja fisik (4 sachet + gunting + plastik + jerigen + cooler + serok + sendok + sedotan); `RecipeRules` 7 pemicu (`cut → pour_powder → pour_water → stir → fill_scoop → add_ice → add_straw`) dengan penalti urutan; **tangan terdekat menang** (`_choose_hand`), `Q` tukar tangan; pelanggan **komplain** kalau belum siap (`"Kurang: …"`) dan **ambil sendiri** kalau sudah siap. `tests/runtime_test.gd` + `_test_task15()` (12 blok asersi A–L). Docs (`context.md`, `todo.md`, `Readme.md`) disinkronkan | 314/314 ✅ boot OK |
 | 2026-10-21 | Cara install APK tanpa adb | APK diverifikasi **signed** via `apksigner verify` → "Verifies", skema v2 + v3, signer `CN=Android Debug` (RSA 2048) → aman di-*sideload*. `Readme.md` ditambah bagian **"⭐ Cara paling gampang — TANPA adb"** (copy via USB MTP / Google Drive / WhatsApp → ketuk `.apk` di file manager → izinkan "Install unknown apps"); `adb` jelasin sebagai **alternatif** (full path `C:\Users\WIN10\AppData\Local\Android\Sdk\platform-tools\adb.exe`, belum ada di PATH); catatan `.idsig` tidak perlu dikirim ke HP | 246/246 ✅ (tidak ada perubahan kode — docs only) |
 | 2026-10-21 | Commit ke GitHub | Semua pekerjaan Task 12c–12f + 13 + 14 di-commit & push ke `origin/master` (`https://github.com/ieu-iz/Es-Cekek.git`): commit `6f6b967`, 470 file, +15.373 baris. File sampah `ERR')` dihapus. Push pertama **ditolak** (remote punya commit `8054e42 "add readme"` yang belum ada di lokal) → diselesaikan via `git rebase origin/master` + resolusi konflik `Readme.md` add/add (versi lokal yang lebih baru dipertahankan). Branch `worktree/zoocode` **tidak** disentuh. Verifikasi setelah rebase: 246/246 hijau, boot bersih, `git grep` tidak menemukan conflict marker | 246/246 ✅ boot OK |
 | 2026-10-21 | Task 12c–12f + re-export | Pipeline asset Kenney CC0 (`scripts/prepare_kenney_assets.ps1`) → `assets/kenney/` 197 GLB (10,6 MB) + 4 colormap; karakter player/pelanggan pakai mini-characters GLB; 3 lokasi dibangun dari mesh Kenney; propsi stand (meja konter, 3 kursi, 5 bangku, kasir, rak prep) diganti mesh sungguhan; **bug collision tersembunyi ditemukan** (`CounterShape` tanpa `type=` → `Counter` tanpa collision shape → panel prep tak bisa dibuka saat main) + 7 asersi regresi; 4 build di-ekspor ulang (Windows pck 181 KB → 3,4 MB, Android **harus `--export-debug`** supaya signed); alat ukur sementara dihapus; `context.md`/`todo.md`/`Readme.md`/plan disinkronkan | 246/246 ✅ boot OK (exe boot bersih) |

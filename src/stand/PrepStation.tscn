@@ -1,29 +1,190 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=14 format=3]
+
+; Area prep (Task 15 — first-person hands).
+; Node ini adalah "meja kerja": semua alat & bahan ada sebagai OBJEK FISIK
+; yang bisa dipegang tangan kiri/kanan dan digerakkan dengan mouse.
+;
+; Sumbu lokal: x = kiri-kanan, z = ke arah pelanggan (+Z), y = tinggi meja.
+; Vendor berdiri di sisi -Z, jadi semua objek diletakkan di z ~ -0.4.
 
 [ext_resource type="Script" path="res://src/stand/PrepStation.gd" id="1_prepstation"]
+[ext_resource type="Script" path="res://src/prep/PrepObject.gd" id="2_prepobject"]
 [ext_resource type="PackedScene" path="res://assets/kenney/food/cutting-board.glb" id="ken_cutting_board"]
 [ext_resource type="PackedScene" path="res://assets/kenney/food/barrel.glb" id="ken_barrel"]
 [ext_resource type="PackedScene" path="res://assets/kenney/food/carton.glb" id="ken_carton"]
 [ext_resource type="PackedScene" path="res://assets/kenney/food/soda-can.glb" id="ken_soda_can"]
+[ext_resource type="PackedScene" path="res://assets/kenney/food/bag-flat.glb" id="ken_bag_flat"]
+[ext_resource type="PackedScene" path="res://assets/kenney/food/bag.glb" id="ken_bag"]
+[ext_resource type="PackedScene" path="res://assets/kenney/food/bowl.glb" id="ken_bowl"]
+[ext_resource type="PackedScene" path="res://assets/kenney/food/cooking-spoon.glb" id="ken_spoon"]
+[ext_resource type="PackedScene" path="res://assets/kenney/food/chopstick.glb" id="ken_chopstick"]
+
+[sub_resource type="BoxShape3D" id="box_blade"]
+size = Vector3(0.018, 0.004, 0.15)
+
+[sub_resource type="BoxMesh" id="mesh_blade"]
+size = Vector3(0.018, 0.004, 0.15)
+
+[sub_resource type="BoxMesh" id="mesh_handle"]
+size = Vector3(0.024, 0.018, 0.07)
 
 [node name="PrepStation" type="Node3D"]
 script = ExtResource("1_prepstation")
 
-[node name="Rack" type="Node3D" parent="."]
-position = Vector3(0, 0, -0.22)
-
-[node name="CuttingBoard" parent="Rack" instance=ExtResource("ken_cutting_board")]
-position = Vector3(0.05, 0, 0)
+[node name="WorkBoard" parent="." instance=ExtResource("ken_cutting_board")]
+position = Vector3(-0.05, 0.005, -0.28)
 scale = Vector3(1.0, 1.0, 0.45)
 
-[node name="IceCooler" parent="." instance=ExtResource("ken_barrel")]
-position = Vector3(-0.42, 0, -0.2)
-scale = Vector3(0.45, 0.3, 0.45)
+; --- Rak sachet: 4 sachet, satu per brand -------------------------------
 
-[node name="WaterDispenser" parent="." instance=ExtResource("ken_carton")]
-position = Vector3(0.48, 0, -0.2)
-scale = Vector3(0.9, 0.4, 0.9)
+[node name="Sachet_1" type="Node3D" parent="."]
+position = Vector3(-1.0, 0.03, -0.4)
+script = ExtResource("2_prepobject")
+kind = 0
+display_name = "Sachet"
+pick_size = Vector3(0.2, 0.1, 0.16)
+
+[node name="Mesh" parent="Sachet_1" instance=ExtResource("ken_bag_flat")]
+scale = Vector3(0.55, 0.55, 0.55)
+
+[node name="Sachet_2" type="Node3D" parent="."]
+position = Vector3(-0.82, 0.03, -0.4)
+script = ExtResource("2_prepobject")
+kind = 0
+display_name = "Sachet"
+pick_size = Vector3(0.2, 0.1, 0.16)
+
+[node name="Mesh" parent="Sachet_2" instance=ExtResource("ken_bag_flat")]
+scale = Vector3(0.55, 0.55, 0.55)
+
+[node name="Sachet_3" type="Node3D" parent="."]
+position = Vector3(-0.64, 0.03, -0.4)
+script = ExtResource("2_prepobject")
+kind = 0
+display_name = "Sachet"
+pick_size = Vector3(0.2, 0.1, 0.16)
+
+[node name="Mesh" parent="Sachet_3" instance=ExtResource("ken_bag_flat")]
+scale = Vector3(0.55, 0.55, 0.55)
+
+[node name="Sachet_4" type="Node3D" parent="."]
+position = Vector3(-0.46, 0.03, -0.4)
+script = ExtResource("2_prepobject")
+kind = 0
+display_name = "Sachet"
+pick_size = Vector3(0.2, 0.1, 0.16)
+
+[node name="Mesh" parent="Sachet_4" instance=ExtResource("ken_bag_flat")]
+scale = Vector3(0.55, 0.55, 0.55)
+
+; --- Gunting (mesh prosedural: 2 bilah + 2 gagang) -----------------------
+
+[node name="Scissors" type="Node3D" parent="."]
+position = Vector3(-0.26, 0.015, -0.42)
+rotation = Vector3(0, 0.5, 0)
+script = ExtResource("2_prepobject")
+kind = 1
+display_name = "Gunting"
+pick_size = Vector3(0.18, 0.1, 0.26)
+
+[node name="Mesh" type="Node3D" parent="Scissors"]
+
+[node name="Blade_L" type="MeshInstance3D" parent="Scissors/Mesh"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.014, 0, 0.035)
+mesh = SubResource("mesh_blade")
+
+[node name="Blade_R" type="MeshInstance3D" parent="Scissors/Mesh"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.014, 0, 0.035)
+mesh = SubResource("mesh_blade")
+
+[node name="Handle_L" type="MeshInstance3D" parent="Scissors/Mesh"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.032, 0, -0.07)
+mesh = SubResource("mesh_handle")
+
+[node name="Handle_R" type="MeshInstance3D" parent="Scissors/Mesh"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.032, 0, -0.07)
+mesh = SubResource("mesh_handle")
+
+; --- Plastik (tumpukan; satu diambil untuk pembuatan) -------------------
+
+[node name="PlasticBag" type="Node3D" parent="."]
+position = Vector3(-0.04, 0.02, -0.26)
+script = ExtResource("2_prepobject")
+kind = 2
+display_name = "Plastik"
+pick_size = Vector3(0.22, 0.14, 0.2)
+
+[node name="Mesh" parent="PlasticBag" instance=ExtResource("ken_bag")]
+scale = Vector3(0.5, 0.5, 0.5)
+
+[node name="Stack" parent="PlasticBag/Mesh" instance=ExtResource("ken_bag_flat")]
+position = Vector3(0.01, -0.01, 0.03)
+rotation = Vector3(0, 0.7, 0)
+scale = Vector3(0.42, 0.42, 0.42)
+
+; --- Sendok aduk ---------------------------------------------------------
+
+[node name="Spoon" type="Node3D" parent="."]
+position = Vector3(0.2, 0.02, -0.42)
+rotation = Vector3(0, -0.4, 0)
+script = ExtResource("2_prepobject")
+kind = 6
+display_name = "Sendok"
+pick_size = Vector3(0.16, 0.1, 0.22)
+
+[node name="Mesh" parent="Spoon" instance=ExtResource("ken_spoon")]
+scale = Vector3(0.7, 0.7, 0.7)
+
+; --- Sedotan (di dalam wadah kaleng) -------------------------------------
 
 [node name="StrawHolder" parent="." instance=ExtResource("ken_soda_can")]
-position = Vector3(0.75, 0, -0.18)
-scale = Vector3(0.8, 0.8, 0.8)
+position = Vector3(0.44, 0.06, -0.44)
+scale = Vector3(0.5, 0.5, 0.5)
+
+[node name="Straw" type="Node3D" parent="."]
+position = Vector3(0.42, 0.02, -0.3)
+rotation = Vector3(1.5708, 0.6, 0)
+script = ExtResource("2_prepobject")
+kind = 7
+display_name = "Sedotan"
+pick_size = Vector3(0.12, 0.08, 0.28)
+
+[node name="Mesh" parent="Straw" instance=ExtResource("ken_chopstick")]
+scale = Vector3(0.7, 0.7, 0.7)
+
+; --- Jerigen air ---------------------------------------------------------
+
+[node name="WaterJug" type="Node3D" parent="."]
+position = Vector3(0.68, 0.08, -0.42)
+script = ExtResource("2_prepobject")
+kind = 3
+display_name = "Jerigen Air"
+pick_size = Vector3(0.24, 0.24, 0.24)
+
+[node name="Mesh" parent="WaterJug" instance=ExtResource("ken_carton")]
+scale = Vector3(0.55, 0.55, 0.55)
+
+; --- Serok es ------------------------------------------------------------
+
+[node name="IceScoop" type="Node3D" parent="."]
+position = Vector3(0.86, 0.04, -0.2)
+rotation = Vector3(0, 0.3, 0)
+script = ExtResource("2_prepobject")
+kind = 5
+display_name = "Serok Es"
+pick_size = Vector3(0.2, 0.12, 0.2)
+
+[node name="Mesh" parent="IceScoop" instance=ExtResource("ken_bowl")]
+scale = Vector3(0.45, 0.45, 0.45)
+
+; --- Cooler es -----------------------------------------------------------
+
+[node name="IceCooler" type="Node3D" parent="."]
+position = Vector3(1.0, 0.1, -0.42)
+script = ExtResource("2_prepobject")
+kind = 4
+display_name = "Cooler Es"
+pick_size = Vector3(0.3, 0.24, 0.3)
+
+[node name="Mesh" parent="IceCooler" instance=ExtResource("ken_barrel")]
+scale = Vector3(0.45, 0.3, 0.45)

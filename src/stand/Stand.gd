@@ -35,12 +35,18 @@ var current_bag: Bag = null:
 		_refresh_bag_visual()
 ## The spawner that fills this stand's seats and queue.
 var spawner: CustomerSpawner = null
+## Harga yang dipilih pemain untuk es yang sedang dibuat (Task 15).
+## Berlaku juga SEBELUM tas dibuat, supaya harga bisa diatur lebih dulu.
+var target_price: float = 0.0
 
 
 func _ready() -> void:
 	prep_station.set_equipment(equipment)
 	prep_station.set_rack(Catalog.brands)
 	equipment.refresh_from_inventory()
+
+	# Sachet fisik di meja <- brand dari katalog (Task 15).
+	_setup_sachets()
 
 	# Keep the stand's slots in sync when the player buys a new tool.
 	var cb := _on_tools_changed
@@ -65,6 +71,23 @@ func _ready() -> void:
 
 func set_spawner(customer_spawner: CustomerSpawner) -> void:
 	spawner = customer_spawner
+
+
+## Pasang brand ke sachet fisik di meja (urutan kiri -> kanan = urutan
+## katalog) dan warnai sesuai brand masing-masing.
+func _setup_sachets() -> void:
+	var sachets: Array[PrepObject] = []
+	for child in prep_station.get_children():
+		var obj := child as PrepObject
+		if obj != null and int(obj.kind) == PrepObject.Kind.SACHET:
+			sachets.append(obj)
+	for i in range(sachets.size()):
+		if i >= Catalog.brands.size():
+			break
+		var brand := Catalog.brands[i]
+		sachets[i].brand = brand
+		sachets[i].display_name = brand.display_name
+		sachets[i].apply_brand_tint()
 
 
 ## Hubungkan sinyal langkah prep ke bunyi prosedural (autoload `Audio`).
@@ -133,10 +156,20 @@ func service_position() -> Vector3:
 	return global_position + Vector3(0.0, 0.0, 1.6)
 
 
+## Titik di sisi pelanggan tempat pelanggan berdiri untuk mengambil es.
+func pickup_position() -> Vector3:
+	if counter != null:
+		return counter.global_position + Vector3(0.0, 0.0, 0.95)
+	return global_position + Vector3(0.0, 0.0, 0.95)
+
+
 # --- Bag / serve --------------------------------------------------------
 
 ## Put a freshly built bag on the counter, ready to be served.
 func offer_bag(bag: Bag) -> void:
+	if bag != null and target_price > 0.0:
+		# Harga yang sudah dipilih pemain dipakai untuk tas ini.
+		bag.sell_price = maxf(target_price, bag.cost())
 	current_bag = bag
 	if bag != null:
 		bag_offered.emit(bag)
@@ -197,6 +230,14 @@ func snapshot() -> Dictionary:
 		data["fair_max"] = current_bag.fair_price_max()
 		data["recommended"] = current_bag.recommended_price()
 		data["quality"] = current_bag.prep_quality
+	else:
+		# Belum ada tas: harga tetap bisa diatur untuk es yang sedang dibuat.
+		var est := prep_station.estimated_cost()
+		data["cost"] = est
+		data["fair_min"] = est
+		data["fair_max"] = est * 1.6
+		data["recommended"] = est * 1.3
+		data["price"] = target_price if target_price > 0.0 else est * 1.3
 	return data
 
 
@@ -281,25 +322,37 @@ func _refresh_bag_visual() -> void:
 # --- Player interaction -------------------------------------------------
 
 ## Called by the Player when it taps INTERACT at the stand.
-## If a bag is on the counter, serve it to the next customer. Otherwise open
-## the prep panel so the player can build a drink.
+## Task 15: bukan membuka panel 2D, tapi masuk mode first-person (tangan).
 func interact_at_stand() -> void:
-	if current_bag != null:
-		_do_serve()
-	else:
-		prep_station.open_build()
-		UILayer.show_prep_panel(true)
-		_refresh_ui()
+	for p in get_tree().get_nodes_in_group("player"):
+		if p.has_method("enter_prep_mode"):
+			p.call("enter_prep_mode", self)
+			return
+	# Tidak ada pemain (mis. tes): tetap siapkan sesi + tampilkan HUD.
+	enter_prep()
+
+
+## Dipanggil pemain saat masuk mode prep.
+func enter_prep() -> void:
+	prep_station.open_build()
+	UILayer.show_prep_panel(true)
+	_refresh_ui()
+
+
+## Dipanggil pemain saat keluar dari mode prep.
+func exit_prep() -> void:
+	UILayer.show_prep_panel(false)
+	prep_station.reset()
+	_refresh_ui()
 
 
 ## Close the prep panel and release the player.
 func close_prep() -> void:
-	UILayer.show_prep_panel(false)
-	prep_station.reset()
-	_refresh_ui()
 	for p in get_tree().get_nodes_in_group("player"):
-		if p.has_method("release_stand"):
-			p.call("release_stand")
+		if p.has_method("exit_prep_mode"):
+			p.call("exit_prep_mode")
+			return
+	exit_prep()
 
 
 # --- Prep panel actions -------------------------------------------------
@@ -310,57 +363,37 @@ func _refresh_ui() -> void:
 		UILayer.update_prep(snapshot())
 
 
+## Hanya harga, restock, dan keluar yang tersisa sebagai tombol UI.
+## Semua langkah pembuatan es dilakukan FISIK (lihat `RecipeRules`).
 func _on_prep_action(action: StringName, value: float) -> void:
 	match action:
-		UILayer.ACTION_BRAND_SELECT:
-			var idx := int(value)
-			if idx >= 0 and idx < prep_station.rack.size():
-				prep_station.select_brand(prep_station.rack[idx])
-			_refresh_ui()
-		UILayer.ACTION_VOLUME_INC:
-			prep_station.pour(prep_station.volume + PrepStation.VOLUME_STEP)
-			_refresh_ui()
-		UILayer.ACTION_VOLUME_DEC:
-			prep_station.pour(prep_station.volume - PrepStation.VOLUME_STEP)
-			_refresh_ui()
-		UILayer.ACTION_ICE_INC:
-			prep_station.add_ice(PrepStation.ICE_STEP)
-			_refresh_ui()
-		UILayer.ACTION_ICE_DEC:
-			prep_station.add_ice(-PrepStation.ICE_STEP)
-			_refresh_ui()
-		UILayer.ACTION_WATER:
-			prep_station.add_water()
-			_refresh_ui()
-		UILayer.ACTION_STIR:
-			prep_station.stir()
-			_refresh_ui()
-		UILayer.ACTION_STRAW:
-			prep_station.add_straw()
-			_refresh_ui()
 		UILayer.ACTION_PRICE_INC:
 			_adjust_price(UILayer.PRICE_STEP)
 		UILayer.ACTION_PRICE_DEC:
 			_adjust_price(-UILayer.PRICE_STEP)
 		UILayer.ACTION_PRICE_SET:
 			_set_price(value)
-		UILayer.ACTION_BUILD:
-			var bag := prep_station.build_bag()
-			if bag != null:
-				offer_bag(bag)
-			else:
-				UILayer.show_error("Bahan habis. Restock dulu.")
-			_refresh_ui()
-		UILayer.ACTION_SERVE:
-			_do_serve()
 		UILayer.ACTION_RESTOCK_SACHET:
 			_restock_sachet()
 			_refresh_ui()
 		UILayer.ACTION_RESTOCK_ICE:
 			_restock_ice()
 			_refresh_ui()
+		UILayer.ACTION_SERVE:
+			_serve_ready()
 		UILayer.ACTION_CANCEL:
 			close_prep()
+
+
+## Serahkan es yang sudah jadi ke pelanggan terdekat. Diteruskan ke
+## `PrepController` milik pemain yang sedang di mode prep.
+func _serve_ready() -> void:
+	for p in get_tree().get_nodes_in_group("player"):
+		var ctrl := p.get_node_or_null("PrepController") as PrepController
+		if ctrl != null and ctrl.active:
+			ctrl.deliver_to_nearest_customer()
+			return
+	UILayer.show_error("Tidak bisa落ち着いて: mode prep tidak aktif.")
 
 
 ## How many sachets of `brand` are in stock (0 when no brand is selected).
@@ -394,20 +427,24 @@ func _restock_ice() -> void:
 
 ## Nudge the price of the offered bag. The price may never drop below cost.
 func _adjust_price(delta: float) -> void:
-	if current_bag == null:
-		return
-	var cost := current_bag.cost()
-	var new_price := maxf(current_bag.sell_price + delta, cost)
-	current_bag.sell_price = new_price
+	if current_bag != null:
+		var cost := current_bag.cost()
+		current_bag.sell_price = maxf(current_bag.sell_price + delta, cost)
+		target_price = current_bag.sell_price
+	else:
+		var base := target_price if target_price > 0.0 else prep_station.estimated_cost() * 1.3
+		target_price = maxf(base + delta, prep_station.estimated_cost())
 	_refresh_ui()
 
 
 ## Set the price of the offered bag directly (the desktop price slider). The
 ## price may never drop below the cost of the ingredients.
 func _set_price(value: float) -> void:
-	if current_bag == null:
-		return
-	current_bag.sell_price = maxf(value, current_bag.cost())
+	if current_bag != null:
+		current_bag.sell_price = maxf(value, current_bag.cost())
+		target_price = current_bag.sell_price
+	else:
+		target_price = maxf(value, prep_station.estimated_cost())
 	_refresh_ui()
 
 

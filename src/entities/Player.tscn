@@ -1,7 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://src/entities/Player.gd" id="1_player"]
 [ext_resource type="Script" path="res://src/entities/KenneyCharacter.gd" id="2_kenney"]
+[ext_resource type="Script" path="res://src/prep/Hand.gd" id="3_hand"]
+[ext_resource type="Script" path="res://src/prep/PrepController.gd" id="4_prepcontroller"]
 
 [sub_resource type="CapsuleShape3D" id="1_capsule"]
 radius = 0.3
@@ -10,9 +12,16 @@ height = 1.7
 [sub_resource type="SphereShape3D" id="2_sphere"]
 radius = 1.6
 
+[sub_resource type="BoxMesh" id="3_handmesh"]
+size = Vector3(0.07, 0.13, 0.05)
+
+[sub_resource type="StandardMaterial3D" id="4_skin"]
+albedo_color = Color(0.86, 0.68, 0.55, 1)
+roughness = 0.75
+
 [node name="Player" type="CharacterBody3D"]
 script = ExtResource("1_player")
-stand_snap_distance = 2.0
+stand_snap_distance = 1.8
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
@@ -41,3 +50,39 @@ collision_mask = 1
 [node name="InteractShape" type="CollisionShape3D" parent="InteractArea"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("2_sphere")
+
+; --- First-person rig (Task 15) ------------------------------------------
+; PrepRig memakai top_level supaya posisinya dihitung di ruang dunia
+; (di meja konter), bukan relatif terhadap Player.
+
+[node name="PrepRig" type="Node3D" parent="."]
+top_level = true
+
+[node name="Camera3D" type="Camera3D" parent="PrepRig"]
+current = false
+fov = 70.0
+near = 0.05
+far = 100.0
+
+[node name="LeftHand" type="Node3D" parent="PrepRig"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.24, -0.28, -0.45)
+script = ExtResource("3_hand")
+side = 0
+
+[node name="HandMesh" type="MeshInstance3D" parent="PrepRig/LeftHand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+mesh = SubResource("3_handmesh")
+surface_material_override/0 = SubResource("4_skin")
+
+[node name="RightHand" type="Node3D" parent="PrepRig"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.24, -0.28, -0.45)
+script = ExtResource("3_hand")
+side = 1
+
+[node name="HandMesh" type="MeshInstance3D" parent="PrepRig/RightHand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+mesh = SubResource("3_handmesh")
+surface_material_override/0 = SubResource("4_skin")
+
+[node name="PrepController" type="Node3D" parent="."]
+script = ExtResource("4_prepcontroller")

@@ -23,9 +23,15 @@ const MAIN_SCENE := "res://src/Main.tscn"
 ## Dimuat lewat path (bukan `class_name`) supaya test tidak bergantung pada
 ## global class cache yang bisa saja basi di folder .godot.
 const PLAYER_SCRIPT := preload("res://src/entities/Player.gd")
+const PREP_OBJECT_SCRIPT := preload("res://src/prep/PrepObject.gd")
+const HAND_SCRIPT := preload("res://src/prep/Hand.gd")
+const PREP_CONTROLLER_SCRIPT := preload("res://src/prep/PrepController.gd")
+const RECIPE_RULES_SCRIPT := preload("res://src/prep/RecipeRules.gd")
 
 var _failures: int = 0
 var _checks: int = 0
+## Baris komplain pelanggan yang tertangkap selama tes Task 15.
+var _complain_lines: Array[String] = []
 
 
 func _check(label: String, condition: bool, detail: String = "") -> void:
@@ -149,6 +155,12 @@ func _run() -> void:
 
 	# --- 12. Task 9: UILayer polish (order queue, price slider, recap) -
 	await _test_task9(loc_root)
+
+	# --- 13. Task 15: first-person hands (RecipeRules + PrepStation + PrepHUD) -
+	await _test_task15(loc_root)
+
+	# --- 13b. Task 16: kontrol layar sentuh (multi-jari + tombol layar) ----
+	await _test_task16(loc_root)
 
 	# --- 13. Task 4: TimeOfDay drives the real day/night lighting ------
 	await _test_timeofday_lighting()
@@ -370,13 +382,568 @@ func _test_task6(loc_root: Node3D) -> void:
 	_check("Es dibatasi kapasitas cooler (8)", prep.ice_amount == 8,
 		"(dapat %d)" % prep.ice_amount)
 
-	# --- The prep panel can be opened and closed ---
+	# --- Task 15: PrepHUD minimal (panel prep lama sudah dibongkar) ---
 	stand.current_bag = null
 	stand.interact_at_stand()
 	var ui_layer := get_tree().root.get_node_or_null("UILayer") as UILayer
-	_check("Prep panel terbuka saat interact", ui_layer != null and ui_layer.is_prep_panel_open())
+	_check("PrepHUD ada di UI root", ui_layer != null and ui_layer.get("_prep_panel") != null)
+	_check("PrepHUD terbuka saat interact", ui_layer != null and ui_layer.is_prep_panel_open())
+	var serve_btn := ui_layer.get("_serve_button") as Button if ui_layer != null else null
+	var exit_btn := ui_layer.get("_exit_button") as Button if ui_layer != null else null
+	_check("Tombol 'Serahkan' ada dan 48dp",
+		serve_btn != null and serve_btn.custom_minimum_size.y >= 48.0)
+	_check("Tombol 'Keluar' ada dan 48dp",
+		exit_btn != null and exit_btn.custom_minimum_size.y >= 48.0)
 	stand.close_prep()
-	_check("Prep panel tertutup setelah Batal", ui_layer != null and not ui_layer.is_prep_panel_open())
+	_check("PrepHUD tertutup setelah keluar", ui_layer != null and not ui_layer.is_prep_panel_open())
+
+
+# --- Task 15: first-person hands ----------------------------------------
+
+## Handler sinyal `Customer.complain` khusus tes Task 15.
+func _on_test_complain(line: String, _annoyance: float) -> void:
+	_complain_lines.append(line)
+
+
+## Pegang `obj` dengan `hand`. Isi tangan sebelumnya dikembalikan ke meja.
+func _hand_hold(hand: Hand, obj: PrepObject) -> void:
+	if hand == null or obj == null:
+		return
+	if hand.holds == obj:
+		return
+	if hand.holds != null:
+		var old := hand.holds
+		hand.release_at(_home_world(old))
+	hand.grab(obj)
+
+
+## Posisi meja asal sebuah objek (koordinat dunia).
+func _home_world(obj: PrepObject) -> Vector3:
+	if obj == null:
+		return Vector3.ZERO
+	if obj.home_parent != null and is_instance_valid(obj.home_parent):
+		return obj.home_parent.to_global(obj.home_transform.origin)
+	return obj.global_position
+
+
+## Kosongkan state semua objek prep (dipakai sebelum masak ulang).
+func _reset_prep_objects(objs: Dictionary) -> void:
+	for key in objs.keys():
+		var o := objs[key] as PrepObject
+		if o != null:
+			o.reset_contents()
+
+
+## Satu langkah resep: `actor` di tangan kiri, `target` di tangan kanan.
+## Mengembalikan nama langkah yang terpicu (StringName kosong kalau tidak ada).
+func _prep_step(session: PrepStation, lh: Hand, rh: Hand, actor: PrepObject, target: PrepObject) -> StringName:
+	if session == null or lh == null or rh == null or actor == null or target == null:
+		return &""
+	# Kedua tangan dikosongkan dulu: kalau tidak, objek yang dipegang tangan
+	# lain tidak bisa diambil (Hand.grab menolak objek yang sudah dipegang).
+	if lh.holds != null:
+		lh.release_at(_home_world(lh.holds))
+	if rh.holds != null:
+		rh.release_at(_home_world(rh.holds))
+	_hand_hold(lh, actor)
+	_hand_hold(rh, target)
+	# Dua objek harus berdekatan supaya rules mendeteksinya.
+	actor.global_position = target.global_position
+	var res := RecipeRules.evaluate(lh, rh)
+	if res.is_empty():
+		return &""
+	RecipeRules.apply_step(session, res)
+	return StringName(res.get("step", &""))
+
+
+## Masak satu es penuh secara fisik (7 pemicu rules).
+func _cook_physical(session: PrepStation, lh: Hand, rh: Hand, objs: Dictionary) -> Array[StringName]:
+	var steps: Array[StringName] = []
+	steps.append(_prep_step(session, lh, rh, objs.get("Scissors"), objs.get("Sachet_1")))
+	steps.append(_prep_step(session, lh, rh, objs.get("Sachet_1"), objs.get("PlasticBag")))
+	steps.append(_prep_step(session, lh, rh, objs.get("WaterJug"), objs.get("PlasticBag")))
+	steps.append(_prep_step(session, lh, rh, objs.get("Spoon"), objs.get("PlasticBag")))
+	steps.append(_prep_step(session, lh, rh, objs.get("IceScoop"), objs.get("IceCooler")))
+	steps.append(_prep_step(session, lh, rh, objs.get("IceScoop"), objs.get("PlasticBag")))
+	steps.append(_prep_step(session, lh, rh, objs.get("Straw"), objs.get("PlasticBag")))
+	return steps
+
+
+## Jumlah objek prep dengan jenis tertentu di bawah `node`.
+func _count_prep_kind(node: Node, kind: int) -> int:
+	var total := 0
+	for child in node.get_children():
+		var obj := child as PrepObject
+		if obj != null and int(obj.kind) == kind:
+			total += 1
+	return total
+
+
+func _test_task15(loc_root: Node3D) -> void:
+	var stand := _find_stand(loc_root)
+	if stand == null:
+		_fail("Stand tidak ada — Task 15 dilewati.")
+		return
+	var prep := stand.prep_station
+	var catalog: Catalog = get_tree().root.get_node_or_null("Catalog")
+	var inv: Inventory = get_tree().root.get_node_or_null("Inventory")
+	_check("PrepStation punya sesi resep", prep != null)
+	if prep == null or catalog == null or inv == null:
+		return
+
+	# --- A. Objek fisik di meja ------------------------------------------
+	var kinds: Dictionary = {
+		"Sachet_1": PrepObject.Kind.SACHET,
+		"Scissors": PrepObject.Kind.SCISSORS,
+		"PlasticBag": PrepObject.Kind.PLASTIC_BAG,
+		"WaterJug": PrepObject.Kind.WATER_JUG,
+		"IceCooler": PrepObject.Kind.ICE_COOLER,
+		"IceScoop": PrepObject.Kind.ICE_SCOOP,
+		"Spoon": PrepObject.Kind.SPOON,
+		"Straw": PrepObject.Kind.STRAW,
+	}
+	var objs: Dictionary = {}
+	for key in kinds.keys():
+		var obj := prep.get_node_or_null(NodePath(key)) as PrepObject
+		_check("Objek '%s' ada di meja" % key, obj != null)
+		if obj == null:
+			continue
+		_check("Objek '%s' jenisnya benar" % key, int(obj.kind) == int(kinds[key]))
+		objs[key] = obj
+	_check("Rak berisi 4 sachet", _count_prep_kind(prep, PrepObject.Kind.SACHET) == 4)
+
+	# --- B. Rig first-person di Player -----------------------------------
+	var players := get_tree().get_nodes_in_group("player")
+	var player: Player = null
+	if players.size() > 0:
+		player = players[0] as Player
+	_check("Player ada di group 'player'", player != null)
+	if player == null:
+		return
+	var rig := player.get_node_or_null("PrepRig") as Node3D
+	var lh := player.get_node_or_null("PrepRig/LeftHand") as Hand
+	var rh := player.get_node_or_null("PrepRig/RightHand") as Hand
+	var ctrl := player.get_node_or_null("PrepController") as PrepController
+	_check("PrepRig first-person ada", rig != null)
+	_check("Tangan kiri & kanan ada", lh != null and rh != null)
+	_check("PrepController ada di Player", ctrl != null)
+	_check("Tangan kiri ditandai kiri", lh != null and lh.side == Hand.HandSide.LEFT)
+	_check("Tangan kanan ditandai kanan", rh != null and rh.side == Hand.HandSide.RIGHT)
+	if lh == null or rh == null or ctrl == null:
+		return
+
+	# --- C. Aturan tangan terdekat ---------------------------------------
+	var probe := objs.get("Sachet_1") as PrepObject
+	if probe != null:
+		lh.global_position = Vector3(-0.40, 1.50, 0.0)
+		rh.global_position = Vector3(0.40, 1.50, 0.0)
+		probe.global_position = Vector3(0.40, 1.50, 0.0)
+		_check("Objek dekat tangan kanan diambil tangan kanan", ctrl._choose_hand(probe) == rh)
+		probe.global_position = Vector3(-0.40, 1.50, 0.0)
+		_check("Objek dekat tangan kiri diambil tangan kiri", ctrl._choose_hand(probe) == lh)
+
+	# --- D. Tukar tangan (Q) ---------------------------------------------
+	if probe != null:
+		_hand_hold(lh, probe)
+		_check("Tangan kiri memegang sachet", lh.holds == probe and probe.held_by == lh)
+		ctrl.swap_hands()
+		_check("Q menukar isi kedua tangan", rh.holds == probe and lh.holds == null)
+		if rh.holds != null:
+			rh.release_at(_home_world(rh.holds))
+		if lh.holds != null:
+			lh.release_at(_home_world(lh.holds))
+
+	# --- E. Resep fisik (drag objek, bukan panel) -----------------------
+	var brand: SachetBrand = null
+	if catalog.brands.size() > 0:
+		brand = catalog.brands[0]
+	_check("Katalog punya brand sachet", brand != null)
+	if brand == null:
+		return
+	inv.add_sachets(brand.id, 5)
+	inv.add_ice(12)
+
+	prep.open_build()
+	_reset_prep_objects(objs)
+	var steps := _cook_physical(prep, lh, rh, objs)
+	_check("Langkah 'gunting potong sachet' terpicu", steps[0] == &"cut", "(dapat %s)" % steps[0])
+	_check("Langkah 'serbub ke plastik' terpicu", steps[1] == &"pour_powder", "(dapat %s)" % steps[1])
+	_check("Langkah 'tuang air' terpicu", steps[2] == &"pour_water", "(dapat %s)" % steps[2])
+	_check("Langkah 'aduk' terpicu", steps[3] == &"stir", "(dapat %s)" % steps[3])
+	_check("Langkah 'serok ambil es' terpicu", steps[4] == &"fill_scoop", "(dapat %s)" % steps[4])
+	_check("Langkah 'es masuk plastik' terpicu", steps[5] == &"add_ice", "(dapat %s)" % steps[5])
+	_check("Langkah 'pasang sedotan' terpicu", steps[6] == &"add_straw", "(dapat %s)" % steps[6])
+
+	# --- F. Urutan langkah & skor ----------------------------------------
+	var expected: Array[StringName] = [&"cut", &"pour_powder", &"pour_water", &"stir", &"add_ice", &"add_straw"]
+	_check("Riwayat langkah sesuai urutan resep", prep.step_history == expected, "(dapat %s)" % str(prep.step_history))
+	_check("Semua langkah wajib tercatat", prep.has_step(&"cut") and prep.has_step(&"pour_powder")
+		and prep.has_step(&"pour_water") and prep.has_step(&"stir")
+		and prep.has_step(&"add_ice") and prep.has_step(&"add_straw"))
+	_check("Tidak ada langkah salah urutan", prep.out_of_order_count == 0, "(dapat %d)" % prep.out_of_order_count)
+	_check("Resep dianggap lengkap", prep.is_complete())
+	_check("Skor langkah sempurna", is_equal_approx(prep.step_score(), 1.0), "(dapat %.2f)" % prep.step_score())
+	_check("Brand terambil dari sachet fisik", prep.selected_brand != null and prep.selected_brand.id == brand.id)
+
+	# --- G. Langkah salah urutan -----------------------------------------
+	prep.open_build()
+	_reset_prep_objects(objs)
+	var bad := _prep_step(prep, lh, rh, objs.get("Straw"), objs.get("PlasticBag"))
+	_check("Bisa melakukan langkah di luar urutan", bad == &"add_straw", "(dapat %s)" % bad)
+	_check("Langkah salah urutan dihitung", prep.out_of_order_count == 1, "(dapat %d)" % prep.out_of_order_count)
+	_check("Penalti menurunkan kualitas", prep.step_score() < 1.0, "(dapat %.2f)" % prep.step_score())
+
+	# --- H. Daftar yang kurang (dipakai komplain) ------------------------
+	prep.open_build()
+	_reset_prep_objects(objs)
+	var missing := prep.missing_steps()
+	_check("Resep kosong menyisakan 6 hal kurang", missing.size() == 6, "(dapat %d)" % missing.size())
+	_check("... 'Belum ambil sachet!'", missing.has("Belum ambil sachet!"))
+	_check("... 'Belum ada serbub sachet!'", missing.has("Belum ada serbub sachet!"))
+	_check("... 'Belum dikasih air!'", missing.has("Belum dikasih air!"))
+	_check("... 'Belum diaduk!'", missing.has("Belum diaduk!"))
+	_check("... 'Belum ada es!'", missing.has("Belum ada es!"))
+	_check("... 'Belum ada sedotannya!'", missing.has("Belum ada sedotannya!"))
+
+	# --- I. Build tas memakai stok (Decision #1) -------------------------
+	prep.open_build()
+	_reset_prep_objects(objs)
+	_cook_physical(prep, lh, rh, objs)
+	var sachets_before := inv.sachet_stock.get(brand.id, 0) as int
+	var ice_before := inv.ice_stock
+	var bag := prep.build_bag()
+	_check("Tas berhasil dibuat", bag != null)
+	_check("1 sachet terpakai saat build", (inv.sachet_stock.get(brand.id, 0) as int) == sachets_before - 1)
+	_check("Es terpakai saat build", inv.ice_stock == ice_before - 2, "(dapat %d)" % inv.ice_stock)
+
+	# --- J. Pelanggan komplain saat es belum siap -----------------------
+	prep.open_build()
+	_reset_prep_objects(objs)
+	prep.set_vessel(objs.get("PlasticBag"))
+	var customer_scene := load("res://src/entities/Customer.tscn") as PackedScene
+	_check("Scene pelanggan bisa dimuat", customer_scene != null)
+	if customer_scene == null:
+		return
+	var customer := customer_scene.instantiate() as Customer
+	loc_root.add_child(customer)
+	customer.setup(brand, 1.0)
+	customer.state = Customer.State.WAITING
+	customer.global_position = stand.pickup_position()
+	_complain_lines.clear()
+	customer.complain.connect(_on_test_complain)
+
+	# Controller dianggap berdiri di depan konter supaya pelanggan uji ini
+	# yang paling dekat (tidak diganggu pelanggan lain).
+	var player_pos := player.global_position
+	player.global_position = stand.pickup_position()
+	ctrl.session = prep
+	ctrl.stand = stand
+	ctrl.deliver_to_nearest_customer()
+	_check("Pelanggan komplain saat es belum siap", _complain_lines.size() > 0)
+	if _complain_lines.size() > 0:
+		_check("Komplain diawali 'Kurang:'", _complain_lines[0].begins_with("Kurang:"))
+		_check("Komplain menyebut bahan yang kurang",
+			_complain_lines[0].contains("Belum ada es!") and _complain_lines[0].contains("Belum dikasih air!"))
+
+	# --- K. Pelanggan ambil sendiri saat es siap ------------------------
+	prep.open_build()
+	_reset_prep_objects(objs)
+	prep.set_vessel(objs.get("PlasticBag"))
+	_cook_physical(prep, lh, rh, objs)
+	_check("Es siap sebelum diserahkan", prep.is_complete())
+	var money_before := inv.money
+	ctrl._check_customer(0.0)
+	_check("Pelanggan mengambil es sendiri", customer.state == Customer.State.SERVED,
+		"(state %d)" % customer.state)
+	_check("Uang bertambah setelah pelanggan ambil", inv.money > money_before, "(dapat %.1f)" % inv.money)
+	_check("Tas sudah diambil dari meja", stand.current_bag == null)
+	player.global_position = player_pos
+	customer.queue_free()
+
+	# --- L. Controller masuk & keluar mode prep --------------------------
+	ctrl.enter(stand)
+	_check("PrepController aktif setelah enter", ctrl.active and ctrl.session == prep)
+	ctrl.exit()
+	_check("PrepController nonaktif setelah exit", not ctrl.active)
+
+
+# --- Task 16 — kontrol layar sentuh --------------------------------------
+
+## Tes kontrol sentuh mode first-person.
+## Yang diuji:
+##   A. Semua objek meja masuk layar & bisa di-pick (bug kamera Task 15).
+##   B. API pointer di PrepController (ambil / geser / lepas).
+##   C. Routing event: mouse -> ambil, mouse -> lepas.
+##   D. Takeover: mouse tiruan (Android) lalu jari di posisi sama.
+##   E. Dua jari: jari kedua = melihat, bukan mengambil.
+##   F. Satu jari di area kosong = melihat.
+##   G. Tombol layar TUKAR TANGAN & PUTAR BADAN.
+##   H. Aksi tombol benar-benar mengubah keadaan.
+## Kembalikan objek & tangan ke keadaan awal: semua di meja, tangan kosong.
+func _restore_prep_state(lh: Hand, rh: Hand, objs: Array[PrepObject]) -> void:
+	for h in [lh, rh]:
+		var hand := h as Hand
+		if hand != null and hand.holds != null:
+			hand.release_at(_home_world(hand.holds))
+	for o in objs:
+		if o != null:
+			o.return_home()
+
+
+## Cari objek + titik layar yang benar-benar bisa di-pick.
+## `unproject_position` saja tidak cukup — objek lain bisa menghalangi.
+## Mengembalikan [obj, Vector2] atau [] kalau tidak ada yang bisa diambil.
+func _find_pick_point(ctrl: PrepController, objs: Array[PrepObject]) -> Array:
+	if ctrl == null or ctrl.camera == null:
+		return []
+	# Prioritaskan objek yang tidak mengubah state sesi resep.
+	var order: Array[StringName] = [&"Scissors", &"Spoon", &"Straw", &"IceScoop"]
+	var ordered: Array[PrepObject] = []
+	for n in order:
+		for o in objs:
+			if o != null and StringName(o.name) == n:
+				ordered.append(o)
+	for o in objs:
+		if o != null and not ordered.has(o):
+			ordered.append(o)
+	for o in ordered:
+		var sp := ctrl.camera.unproject_position(o.global_position)
+		if sp.x < 4.0 or sp.y < 4.0:
+			continue
+		if ctrl.pick_object_at(sp) == o:
+			return [o, sp]
+	return []
+
+
+## Titik layar yang memang kosong (tidak ada objek di bawahnya).
+func _find_empty_point(ctrl: PrepController, vp: Vector2) -> Vector2:
+	var candidates: Array[Vector2] = [
+		Vector2(vp.x * 0.5, 40.0),
+		Vector2(vp.x * 0.5, vp.y - 30.0),
+		Vector2(30.0, 30.0),
+		Vector2(vp.x - 30.0, 30.0),
+	]
+	for c in candidates:
+		if ctrl.pick_object_at(c) == null:
+			return c
+	return Vector2(vp.x * 0.5, 40.0)
+
+
+func _test_task16(loc_root: Node3D) -> void:
+	var stand := _find_stand(loc_root)
+	if stand == null:
+		_fail("Stand tidak ada — Task 16 dilewati.")
+		return
+	var players := get_tree().get_nodes_in_group("player")
+	var player: Player = players[0] if players.size() > 0 else null
+	if player == null:
+		_fail("Player tidak ada — Task 16 dilewati.")
+		return
+	var ctrl := player.get_node_or_null("PrepController") as PrepController
+	var lh := player.get_node_or_null("PrepRig/LeftHand") as Hand
+	var rh := player.get_node_or_null("PrepRig/RightHand") as Hand
+	_check("PrepController punya API pointer sentuh",
+		ctrl != null and ctrl.has_method("begin_drag_at")
+		and ctrl.has_method("end_drag_at")
+		and ctrl.has_method("set_pointer"))
+	if ctrl == null or lh == null or rh == null:
+		return
+
+	# Masuk mode prep supaya rig first-person & kamera aktif.
+	player.global_position = stand.pickup_position()
+	player.enter_prep_mode(stand)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check("Player masuk mode PREP", player.state == Player.State.PREP)
+
+	# --- A. Semua objek meja harus terlihat & bisa di-pick ---------------
+	# (Bug Task 15: kamera terlalu dekat meja -> objek jatuh di luar layar
+	#  sehingga tidak bisa di-drag sama sekali.)
+	var objs: Array[PrepObject] = []
+	for c in stand.prep_station.get_children():
+		var o := c as PrepObject
+		if o != null:
+			objs.append(o)
+	_restore_prep_state(lh, rh, objs)
+	await get_tree().physics_frame
+
+	var vp := get_viewport().get_visible_rect().size
+	var offscreen: Array[String] = []
+	for o in objs:
+		var sp := ctrl.camera.unproject_position(o.global_position)
+		if sp.x < 0.0 or sp.y < 0.0 or sp.x > vp.x or sp.y > vp.y:
+			offscreen.append(String(o.name))
+	_check("Seluruh objek meja terlihat di layar first-person", offscreen.is_empty(),
+		"(di luar layar: %s)" % ", ".join(offscreen))
+
+	var pick := _find_pick_point(ctrl, objs)
+	_check("Ada objek yang bisa diambil lewat layar", not pick.is_empty())
+	if pick.is_empty():
+		player.exit_prep_mode()
+		await get_tree().process_frame
+		return
+	var target_obj: PrepObject = pick[0]
+	var target_pos: Vector2 = pick[1]
+	var empty_pos := _find_empty_point(ctrl, vp)
+	_check("Area kosong di layar tidak menimpa objek",
+		ctrl.pick_object_at(empty_pos) == null)
+	_check("Objek sasaran terbaca lewat ray-pick",
+		ctrl.pick_object_at(target_pos) == target_obj)
+
+	# --- B. API pointer di PrepController --------------------------------
+	var grabbed := ctrl.begin_drag_at(target_pos)
+	_check("Sentuhan di objek mengambilnya", grabbed)
+	_check("Status dragging aktif", ctrl.dragging)
+	_check("Salah satu tangan memegang objek", lh.holds != null or rh.holds != null)
+	ctrl.set_pointer(target_pos)
+	_check("Geser pointer tidak memutus grab",
+		ctrl.dragging and (lh.holds != null or rh.holds != null))
+	ctrl.end_drag_at(target_pos)
+	_check("Lepas pointer mengembalikan objek ke meja",
+		not ctrl.dragging and lh.holds == null and rh.holds == null)
+	_check("Sentuhan di area kosong tidak mengambil", not ctrl.begin_drag_at(empty_pos))
+	_restore_prep_state(lh, rh, objs)
+	await get_tree().physics_frame
+
+	# --- C. Routing event: mouse ----------------------------------------
+	var mb := InputEventMouseButton.new()
+	mb.button_index = MOUSE_BUTTON_LEFT
+	mb.pressed = true
+	mb.position = target_pos
+	player.handle_prep_pointer(mb)
+	_check("Klik mouse pada objek mengambilnya", ctrl.dragging)
+	var mb_up := InputEventMouseButton.new()
+	mb_up.button_index = MOUSE_BUTTON_LEFT
+	mb_up.pressed = false
+	mb_up.position = target_pos
+	player.handle_prep_pointer(mb_up)
+	_check("Lepas mouse mengembalikan objek ke meja",
+		not ctrl.dragging and lh.holds == null and rh.holds == null)
+	var mb_empty := InputEventMouseButton.new()
+	mb_empty.button_index = MOUSE_BUTTON_LEFT
+	mb_empty.pressed = true
+	mb_empty.position = empty_pos
+	player.handle_prep_pointer(mb_empty)
+	_check("Klik mouse di area kosong tidak mengambil", not ctrl.dragging)
+	_restore_prep_state(lh, rh, objs)
+	await get_tree().physics_frame
+
+	# --- D. Takeover mouse tiruan -> jari --------------------------------
+	# Android mengirim mouse tiruan lebih dulu, baru event sentuh asli.
+	var mb_drag := InputEventMouseButton.new()
+	mb_drag.button_index = MOUSE_BUTTON_LEFT
+	mb_drag.pressed = true
+	mb_drag.position = target_pos
+	player.handle_prep_pointer(mb_drag)
+	_check("Mouse tiruan mengambil objek", ctrl.dragging)
+	var st_takeover := InputEventScreenTouch.new()
+	st_takeover.index = 0
+	st_takeover.pressed = true
+	st_takeover.position = target_pos
+	player.handle_prep_pointer(st_takeover)
+	_check("Jari di posisi klik mengambil alih drag", ctrl.dragging)
+	# Geser jari -> objek ikut bergerak, bukan memutar pandangan.
+	var pitch_before := player._pitch
+	var sd := InputEventScreenDrag.new()
+	sd.index = 0
+	sd.position = target_pos + Vector2(40.0, -20.0)
+	sd.relative = Vector2(40.0, -20.0)
+	player.handle_prep_pointer(sd)
+	_check("Geser jari menggerakkan objek yang dipegang",
+		ctrl.dragging and (lh.holds != null or rh.holds != null))
+	_check("Geser jari saat drag tidak memutar pandangan",
+		is_equal_approx(player._pitch, pitch_before))
+	var st_release := InputEventScreenTouch.new()
+	st_release.index = 0
+	st_release.pressed = false
+	st_release.position = sd.position
+	player.handle_prep_pointer(st_release)
+	_check("Lepas jari mengembalikan objek ke meja",
+		not ctrl.dragging and lh.holds == null and rh.holds == null)
+	_restore_prep_state(lh, rh, objs)
+	await get_tree().physics_frame
+
+	# --- E. Dua jari: jari kedua untuk melihat ---------------------------
+	var st1 := InputEventScreenTouch.new()
+	st1.index = 0
+	st1.pressed = true
+	st1.position = target_pos
+	player.handle_prep_pointer(st1)
+	_check("Jari pertama di objek mengambilnya", ctrl.dragging)
+	var st2 := InputEventScreenTouch.new()
+	st2.index = 1
+	st2.pressed = true
+	st2.position = empty_pos
+	player.handle_prep_pointer(st2)
+	_check("Jari kedua di area kosong tidak mengambil objek", ctrl.dragging)
+	var st2_release := InputEventScreenTouch.new()
+	st2_release.index = 1
+	st2_release.pressed = false
+	st2_release.position = empty_pos
+	player.handle_prep_pointer(st2_release)
+	_check("Lepas jari kedua tidak menempelkan objek", ctrl.dragging)
+	var st1_release := InputEventScreenTouch.new()
+	st1_release.index = 0
+	st1_release.pressed = false
+	st1_release.position = target_pos
+	player.handle_prep_pointer(st1_release)
+	_check("Lepas jari pertama mengembalikan objek ke meja",
+		not ctrl.dragging and lh.holds == null and rh.holds == null)
+	_restore_prep_state(lh, rh, objs)
+	await get_tree().physics_frame
+
+	# --- F. Satu jari di area kosong = melihat ---------------------------
+	var yaw_before := player._yaw
+	var st_look := InputEventScreenTouch.new()
+	st_look.index = 0
+	st_look.pressed = true
+	st_look.position = empty_pos
+	player.handle_prep_pointer(st_look)
+	_check("Satu jari di area kosong tidak mengambil objek", not ctrl.dragging)
+	var sd_look := InputEventScreenDrag.new()
+	sd_look.index = 0
+	sd_look.position = empty_pos + Vector2(30.0, 0.0)
+	sd_look.relative = Vector2(30.0, 0.0)
+	player.handle_prep_pointer(sd_look)
+	_check("Satu jari di area kosong memutar pandangan",
+		not is_equal_approx(player._yaw, yaw_before))
+	var st_look_release := InputEventScreenTouch.new()
+	st_look_release.index = 0
+	st_look_release.pressed = false
+	st_look_release.position = sd_look.position
+	player.handle_prep_pointer(st_look_release)
+	_check("Lepas jari pengamat tidak grabbing apa pun", not ctrl.dragging)
+
+	# --- G. Tombol layar TUKAR TANGAN & PUTAR BADAN ---------------------
+	var seen: Dictionary = {}
+	var on_action := func(action: StringName, _value: float) -> void:
+		seen[action] = true
+	UILayer.prep_action.connect(on_action)
+	UILayer.prep_action.emit(UILayer.ACTION_SWAP_HAND, 0.0)
+	_check("Tombol TUKAR TANGAN mengirim ACTION_SWAP_HAND", seen.has(UILayer.ACTION_SWAP_HAND))
+	var body_yaw_before := player._body_yaw
+	UILayer.prep_action.emit(UILayer.ACTION_TURN_BODY, 0.0)
+	_check("Tombol PUTAR BADAN mengirim ACTION_TURN_BODY", seen.has(UILayer.ACTION_TURN_BODY))
+	_check("Tombol PUTAR BADAN memutar badan",
+		not is_equal_approx(player._body_yaw, body_yaw_before))
+	if UILayer.prep_action.is_connected(on_action):
+		UILayer.prep_action.disconnect(on_action)
+
+	# --- H. Aksi tombol benar-benar mengubah keadaan ---------------------
+	var probe := stand.prep_station.get_node_or_null("Sachet_1") as PrepObject
+	if probe != null:
+		_hand_hold(lh, probe)
+		UILayer.prep_action.emit(UILayer.ACTION_SWAP_HAND, 0.0)
+		_check("Tukar tangan lewat tombol layar pindah isi tangan", rh.holds == probe and lh.holds == null)
+		if rh.holds != null:
+			rh.release_at(_home_world(rh.holds))
+	else:
+		_check("Objek sachet tersedia untuk tes tukar tangan", false)
+
+	# Keluar dari mode prep supaya test lain tidak terpengaruh.
+	player.exit_prep_mode()
+	await get_tree().process_frame
+	_check("Keluar dari mode prep", player.state != Player.State.PREP)
 
 
 # --- Task 7 -------------------------------------------------------------

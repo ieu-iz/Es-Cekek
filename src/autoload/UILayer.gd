@@ -10,33 +10,31 @@ signal interact_pressed
 signal travel_requested(location_id: StringName)
 ## Emitted when the player dismisses the day-end summary.
 signal day_end_continue
-## Emitted when the player taps a button on the prep panel.
-## `action` is one of the ACTION_* constants below, `value` is the brand index
-## or the step delta depending on the action.
+## Emitted when the player taps a button on the minimal prep HUD.
+## `action` is one of the ACTION_* constants below, `value` is the new price
+## for ACTION_PRICE_SET (0 otherwise).
 signal prep_action(action: StringName, value: float)
 ## Emitted when the player taps a button on the shop panel.
 ## `action` is one of the SHOP_ACTION_* constants below, `value` is the index
 ## of the tool inside UILayer.shop_tools().
 signal shop_action(action: StringName, value: float)
 
-## Prep panel actions.
-const ACTION_BRAND_SELECT: StringName = &"brand_select"
-const ACTION_VOLUME_INC: StringName = &"volume_inc"
-const ACTION_VOLUME_DEC: StringName = &"volume_dec"
-const ACTION_ICE_INC: StringName = &"ice_inc"
-const ACTION_ICE_DEC: StringName = &"ice_dec"
-const ACTION_WATER: StringName = &"add_water"
-const ACTION_STIR: StringName = &"stir"
-const ACTION_STRAW: StringName = &"add_straw"
-const ACTION_BUILD: StringName = &"build"
-const ACTION_SERVE: StringName = &"serve"
+## Prep HUD actions (Task 15).
+## Catatan: tidak ada lagi tombol brand/volume/air/aduk/es/sedotan — semua
+## langkah es dilakukan FISIK dengan drag objek 3D (lihat `RecipeRules`).
 const ACTION_PRICE_INC: StringName = &"price_inc"
 const ACTION_PRICE_DEC: StringName = &"price_dec"
 const ACTION_RESTOCK_SACHET: StringName = &"restock_sachet"
 const ACTION_RESTOCK_ICE: StringName = &"restock_ice"
+## Serahkan es yang sudah jadi ke pelanggan.
+const ACTION_SERVE: StringName = &"serve"
 const ACTION_CANCEL: StringName = &"cancel"
 ## Set the price of the offered bag directly (desktop price slider).
 const ACTION_PRICE_SET: StringName = &"price_set"
+## Task 16 — tukar isi kedua tangan (pengganti tombol Q di layar sentuh).
+const ACTION_SWAP_HAND: StringName = &"swap_hand"
+## Task 16 — putar badan 180 derajat (pengganti tombol R di layar sentuh).
+const ACTION_TURN_BODY: StringName = &"turn_body"
 
 ## Shop panel actions.
 const SHOP_ACTION_BUY_TOOL: StringName = &"buy_tool"
@@ -78,23 +76,22 @@ var _order_rows: Array[Label] = []
 ## most twice a second, not on every frame).
 var _order_queue_timer: float = 0.0
 
-# --- Prep panel (Task 6/7) ---
+# --- Prep HUD (Task 15 — panel prep lama dibongkar total) ---
 var _prep_panel: PanelContainer = null
 var _prep_title: Label = null
 var _prep_status: Label = null
-var _prep_brand_grid: GridContainer = null
-var _prep_brand_buttons: Array[Button] = []
-var _volume_label: Label = null
-var _ice_label: Label = null
+var _prep_steps: Label = null
 var _price_label: Label = null
 var _price_slider: HSlider = null
 ## True while the slider value is being written BY the UI itself. Without
 ## this guard the slider -> prep_action -> refresh -> slider loop would never
 ## end.
 var _price_slider_syncing: bool = false
-var _build_button: Button = null
 var _serve_button: Button = null
+var _exit_button: Button = null
 var _touch_buttons: Control = null
+## Virtual joystick — disembunyikan saat mode prep (tidak ada jalan di meja).
+var _joystick: Control = null
 
 # --- Shop panel (Task 8) ---
 var _shop_panel: PanelContainer = null
@@ -149,6 +146,7 @@ func _ready() -> void:
 		close_btn.pressed.connect(close_location_picker)
 
 	_touch_buttons = _ui_root.get_node_or_null("TouchButtons") as Control
+	_joystick = _ui_root.get_node_or_null("VirtualJoystick") as Control
 
 	# Connect touch buttons in the UI scene.
 	var interact_btn := _ui_root.get_node_or_null("TouchButtons/Interact") as Button
@@ -163,7 +161,7 @@ func _ready() -> void:
 	if shop_btn != null:
 		shop_btn.pressed.connect(func() -> void: open_shop())
 
-	_build_prep_panel()
+	_build_prep_hud()
 	_build_shop_panel()
 	_build_order_queue()
 
@@ -381,108 +379,117 @@ func _build_travel_buttons() -> void:
 		_travel_list.add_child(button)
 
 
-# --- Prep panel (Task 6/7) ----------------------------------------------
+# --- Prep HUD (Task 15) --------------------------------------------------
 
-## Build the prep panel. It is created in code so the layout lives in one
-## place and every button is guaranteed to be a 48dp touch target.
-func _build_prep_panel() -> void:
+## Bangun HUD minimal untuk mode prep.
+## Task 15 membongkar total panel prep lama (tombol brand/volume/air/aduk/es/
+## sedotan): semua langkah es dilakukan dengan drag objek 3D di meja. Yang
+## tersisa hanya baris HUD di bawah layar: status pesanan + langkah yang
+## kurang, harga, restock, tombol serahkan, dan tombol keluar.
+## Semua tombol dijamin 48dp.
+func _build_prep_hud() -> void:
 	if _ui_root == null:
 		return
 
 	_prep_panel = PanelContainer.new()
-	_prep_panel.name = "PrepPanel"
-	_prep_panel.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
-	_prep_panel.offset_left = -384.0
+	_prep_panel.name = "PrepHUD"
+	_prep_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_prep_panel.offset_left = 8.0
 	_prep_panel.offset_right = -8.0
-	_prep_panel.offset_top = 96.0
+	# 4 baris (status + kontrol + harga + aksi) -> 240px.
+	_prep_panel.offset_top = -240.0
 	_prep_panel.offset_bottom = -8.0
 	_prep_panel.visible = false
 	_prep_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_ui_root.add_child(_prep_panel)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 16)
-	margin.add_theme_constant_override("margin_right", 16)
-	margin.add_theme_constant_override("margin_top", 12)
-	margin.add_theme_constant_override("margin_bottom", 12)
+	margin.add_theme_constant_override("margin_left", 12)
+	margin.add_theme_constant_override("margin_right", 12)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
 	_prep_panel.add_child(margin)
 
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 8)
+	column.add_theme_constant_override("separation", 6)
 	margin.add_child(column)
+
+	# --- Baris status: pesanan + langkah yang masih kurang ---
+	var status_row := HBoxContainer.new()
+	status_row.add_theme_constant_override("separation", 8)
+	column.add_child(status_row)
+
+	var status_col := VBoxContainer.new()
+	status_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	status_col.add_theme_constant_override("separation", 2)
+	status_row.add_child(status_col)
 
 	_prep_title = Label.new()
 	_prep_title.text = "Prep Es"
-	_prep_title.add_theme_font_size_override("font_size", 26)
-	column.add_child(_prep_title)
+	_prep_title.add_theme_font_size_override("font_size", 18)
+	status_col.add_child(_prep_title)
 
 	_prep_status = Label.new()
 	_prep_status.text = ""
 	_prep_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_prep_status.max_lines_visible = 2
 	_prep_status.add_theme_font_size_override("font_size", 16)
-	column.add_child(_prep_status)
+	status_col.add_child(_prep_status)
 
-	_prep_brand_grid = GridContainer.new()
-	_prep_brand_grid.columns = 2
-	_prep_brand_grid.add_theme_constant_override("h_separation", 8)
-	_prep_brand_grid.add_theme_constant_override("v_separation", 8)
-	column.add_child(_prep_brand_grid)
+	_prep_steps = Label.new()
+	_prep_steps.text = "0/6"
+	_prep_steps.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_prep_steps.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_prep_steps.add_theme_font_size_override("font_size", 20)
+	status_row.add_child(_prep_steps)
 
-	_volume_label = _add_step_row(column, "Volume", ACTION_VOLUME_DEC, ACTION_VOLUME_INC)
-	_ice_label = _add_step_row(column, "Es", ACTION_ICE_DEC, ACTION_ICE_INC)
+	# --- Baris kontrol first-person (Task 16 — buat layar sentuh) ---
+	# "Tukar Tangan" menggantikan Q, "Putar Badan" menggantikan R.
+	var control_row := HBoxContainer.new()
+	control_row.add_theme_constant_override("separation", 6)
+	column.add_child(control_row)
+	control_row.add_child(_make_button("Tukar Tangan", ACTION_SWAP_HAND, 0.0))
+	control_row.add_child(_make_button("Putar Badan", ACTION_TURN_BODY, 0.0))
 
-	var steps := HBoxContainer.new()
-	steps.add_theme_constant_override("separation", 6)
-	column.add_child(steps)
-	steps.add_child(_make_button("Air", ACTION_WATER, 0.0))
-	steps.add_child(_make_button("Aduk", ACTION_STIR, 0.0))
-	steps.add_child(_make_button("Sedotan", ACTION_STRAW, 0.0))
+	# --- Baris harga (tombol -/+ 48dp + slider desktop) ---
+	var price_row := HBoxContainer.new()
+	price_row.add_theme_constant_override("separation", 6)
+	column.add_child(price_row)
+	price_row.add_child(_make_button("-", ACTION_PRICE_DEC, -1.0))
 
-	_price_label = _add_step_row(column, "Harga", ACTION_PRICE_DEC, ACTION_PRICE_INC)
+	_price_label = Label.new()
+	_price_label.text = "Harga: Rp 0"
+	_price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_price_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_price_label.add_theme_font_size_override("font_size", 18)
+	price_row.add_child(_price_label)
 
-	# Desktop price slider. The plan uses +/- buttons on touch and a slider on
-	# desktop, so the slider is hidden on the mobile build.
+	price_row.add_child(_make_button("+", ACTION_PRICE_INC, 1.0))
+
+	# Desktop price slider (disembunyikan di build mobile, +- dipakai).
 	_price_slider = HSlider.new()
 	_price_slider.min_value = 0.0
 	_price_slider.max_value = 100.0
 	_price_slider.step = 100.0
-	_price_slider.custom_minimum_size = Vector2(0, 48)
+	_price_slider.custom_minimum_size = Vector2(160, 48)
+	_price_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_price_slider.visible = not OS.has_feature("mobile")
 	_price_slider.value_changed.connect(_on_price_slider_changed)
-	column.add_child(_price_slider)
+	price_row.add_child(_price_slider)
 
-	var restock := HBoxContainer.new()
-	restock.add_theme_constant_override("separation", 6)
-	column.add_child(restock)
-	restock.add_child(_make_button("Beli Sachet", ACTION_RESTOCK_SACHET, 0.0))
-	restock.add_child(_make_button("Beli Es", ACTION_RESTOCK_ICE, 0.0))
-
+	# --- Baris aksi ---
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 6)
 	column.add_child(actions)
-	actions.add_child(_make_button("Batal", ACTION_CANCEL, 0.0))
-	_build_button = _make_button("Selesai", ACTION_BUILD, 0.0)
-	actions.add_child(_build_button)
-	_serve_button = _make_button("Sajikan", ACTION_SERVE, 0.0)
+	actions.add_child(_make_button("Beli Sachet", ACTION_RESTOCK_SACHET, 0.0))
+	actions.add_child(_make_button("Beli Es", ACTION_RESTOCK_ICE, 0.0))
+
+	_serve_button = _make_button("Serahkan", ACTION_SERVE, 0.0)
+	_serve_button.visible = false
 	actions.add_child(_serve_button)
 
-	refresh_prep_brands()
-
-
-## One "- <label> +" row. Returns the value label so it can be refreshed.
-func _add_step_row(parent: VBoxContainer, label_text: String, dec_action: StringName, inc_action: StringName) -> Label:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	parent.add_child(row)
-	row.add_child(_make_button("-", dec_action, -1.0))
-	var value_label := Label.new()
-	value_label.text = "%s: -" % label_text
-	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	value_label.add_theme_font_size_override("font_size", 18)
-	row.add_child(value_label)
-	row.add_child(_make_button("+", inc_action, 1.0))
-	return value_label
+	_exit_button = _make_button("Keluar", ACTION_CANCEL, 0.0)
+	actions.add_child(_exit_button)
 
 
 ## A 48dp button that emits a prep action when pressed.
@@ -496,85 +503,70 @@ func _make_button(text: String, action: StringName, value: float) -> Button:
 	return button
 
 
-## (Re)build the rack buttons from the catalog brands.
-func refresh_prep_brands() -> void:
-	if _prep_brand_grid == null:
-		return
-	for b in _prep_brand_buttons:
-		b.queue_free()
-	_prep_brand_buttons.clear()
-
-	for i in range(Catalog.brands.size()):
-		var brand := Catalog.brands[i]
-		var button := Button.new()
-		button.text = brand.display_name
-		button.custom_minimum_size = Vector2(0, 48)
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.add_theme_font_size_override("font_size", 18)
-		var index := i
-		button.pressed.connect(func() -> void: prep_action.emit(ACTION_BRAND_SELECT, float(index)))
-		_prep_brand_grid.add_child(button)
-		_prep_brand_buttons.append(button)
-
-
-## Show / hide the prep panel. The travel/interact buttons are hidden while
-## the panel is open so the two control clusters never overlap.
+## Show / hide the prep HUD. The travel/interact buttons are hidden while
+## the HUD is open so the two control clusters never overlap.
 func show_prep_panel(visible_: bool) -> void:
 	if _prep_panel != null:
 		_prep_panel.visible = visible_
 	if _touch_buttons != null:
 		_touch_buttons.visible = not visible_
+	# Joystick tidak berguna di meja dan bisa menelan sentuhan di area
+	# drag objek, jadi disembunyikan selama mode prep.
+	if _joystick != null:
+		_joystick.visible = not visible_
 
 
 func is_prep_panel_open() -> bool:
 	return _prep_panel != null and _prep_panel.visible
 
 
-## Refresh the panel from a Stand.snapshot() dictionary.
+## Refresh the prep HUD from a Stand.snapshot() dictionary.
 func update_prep(data: Dictionary) -> void:
 	if _prep_panel == null:
 		return
 
 	var has_bag := bool(data.get("has_bag", false))
 	var brand := str(data.get("brand", "-"))
-	var volume := float(data.get("volume", 0.0))
-	var ice := int(data.get("ice", 0))
-	var ice_capacity := int(data.get("ice_capacity", 0))
 	var quality := int(data.get("quality", 0))
 	var cost := float(data.get("cost", 0.0))
-	var stock_sachet := int(data.get("stock_sachet", 0))
-	var stock_ice := int(data.get("stock_ice", 0))
+	var price := float(data.get("price", cost))
+	var complete := bool(data.get("complete", false))
+	var steps_done := int(data.get("steps_done", 0))
+	var out_of_order := int(data.get("out_of_order", 0))
+	var missing: Array = data.get("missing", [])
 
 	if has_bag:
 		_prep_title.text = "Siapkan Sajian"
-		_prep_status.text = "%s  ·  kualitas %d%%\nModal Rp %s" % [
+		_prep_status.text = "%s  ·  kualitas %d%%  ·  modal Rp %s" % [
 			brand, quality, _format_rupiah(cost),
 		]
-		_price_label.text = "Harga: Rp %s" % _format_rupiah(float(data.get("price", 0.0)))
 	else:
 		_prep_title.text = "Prep Es"
-		_prep_status.text = "%s  ·  modal Rp %s\nStok: %d sachet / %d es" % [
-			brand, _format_rupiah(cost), stock_sachet, stock_ice,
-		]
+		var line := "%s  ·  modal Rp %s" % [brand, _format_rupiah(cost)]
+		if missing.is_empty():
+			line += "  ·  semua langkah beres"
+		else:
+			line += "  ·  kurang: " + ", ".join(PackedStringArray(missing))
+		_prep_status.text = line
 
-	_volume_label.text = "Volume: %d%%" % int(round(volume * 100.0))
-	_ice_label.text = "Es: %d/%d" % [ice, ice_capacity]
+	_prep_steps.text = "%d/%d" % [steps_done, PrepStation.STEP_ORDER.size()]
+	if out_of_order > 0:
+		_prep_steps.text += "  (urutan salah x%d)" % out_of_order
 
-	_build_button.disabled = has_bag or not bool(data.get("can_build", false))
-	_serve_button.disabled = not has_bag
+	_price_label.text = "Harga: Rp %s" % _format_rupiah(price)
 
-	_update_price_slider(data, has_bag)
+	# Tombol "Serahkan" hanya muncul kalau resepnya sudah lengkap.
+	_serve_button.visible = complete and not has_bag
+	_serve_button.disabled = has_bag
+
+	_update_price_slider(data)
 
 
 ## Configure the desktop price slider from the current snapshot. The slider
 ## range follows the bag's fair bounds, but the real floor is the bag cost
 ## (a price may never drop below what the ingredients cost).
-func _update_price_slider(data: Dictionary, has_bag: bool) -> void:
+func _update_price_slider(data: Dictionary) -> void:
 	if _price_slider == null:
-		return
-	if not has_bag:
-		# No bag on the counter yet, so there is no price to set.
-		_price_slider.visible = false
 		return
 	var cost := float(data.get("cost", 0.0))
 	var fair_min := float(data.get("fair_min", cost))

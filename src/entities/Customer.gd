@@ -266,6 +266,30 @@ func add_annoyance(amount: float) -> void:
 	annoyance_level = clampf(annoyance_level + amount, 0.0, 1.0)
 
 
+# --- Task 15: first-person hands ----------------------------------------
+
+## Dipanggil saat es siap: pelanggan berjalan ke konter untuk mengambilnya.
+func come_to_counter(pos: Vector3) -> void:
+	if state == State.SERVED or state == State.LEAVING:
+		return
+	target_position = pos
+	_arrived = false
+	state = State.ARRIVING
+	if character != null:
+		character.set_moving(true)
+
+
+## Komplain karena es yang diserahkan belum lengkap. `missing` berisi
+## daftar langkah yang belum dilakukan (lihat `PrepStation.missing_steps`).
+func complain_missing(missing: Array) -> void:
+	var parts := PackedStringArray()
+	for m in missing:
+		parts.append(str(m))
+	var line := "Kurang: " + ", ".join(parts)
+	complain.emit(line, annoyance_level)
+	UILayer.show_complain(line, annoyance_level)
+
+
 # --- Serve evaluation ----------------------------------------------------
 
 ## Evaluate serving `bag` to this customer.

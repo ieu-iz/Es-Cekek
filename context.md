@@ -23,6 +23,10 @@
 ### Quick commands
 
 ```
+run.bat                         # main the game straight from source (no export needed)
+run.bat --editor                # open Godot Editor
+run.bat --test                  # headless smoke test -> "=== Selesai: N/N cek lolos, 0 gagal ==="
+run.bat --build                 # export all 4 platforms in one go
 scripts\run_tests.cmd            # headless smoke test  -> "=== Selesai: N/N cek lolos, 0 gagal ==="
 scripts\run_tests.cmd --boot     # same + boot the game headless for 120 frames
 ```
@@ -37,6 +41,7 @@ scripts\run_tests.cmd --boot     # same + boot the game headless for 120 frames
 Es Cekek/
 ├── project.godot                 Godot project config: autoload order, input, display, renderer
 ├── export_presets.cfg            Export presets: Windows / Linux / macOS / Android (Task 11)
+├── run.bat                       Shortcut Windows: main game dari source (tanpa export/build)
 ├── AGENTS.md                     Mandatory workflow for every AI agent
 ├── context.md                    THIS FILE — living architecture + file index
 ├── todo.md                       Living task tracker (checkboxes, session log)
@@ -94,6 +99,7 @@ Es Cekek/
 |---|---|---|
 | `project.godot` | Autoload registration/order, InputMap seed, display 1280×720, mobile renderer, ETC2 textures | `[autoload]` order is load-bearing; `renderer/rendering_method="mobile"` + `renderer/rendering_method.mobile="gl_compatibility"` (Android dipaksa GLES3); `config/icon="res://assets/icon.png"` (wajib untuk export Android); `config/version="1.0.0"` |
 | `export_presets.cfg` | Preset export: **Windows Desktop**, **Linux**, **macOS**, **Android** → output ke `build/` | Butuh export template Godot 4.7.2 terpasang (**sudah ✅** di `%APPDATA%\Godot\export_templates\4.7.2.stable`); Android butuh SDK+JDK+debug keystore (**sudah ✅** diset di `editor_settings-4.7.tres`). **Android WAJIB pakai `--export-debug`** — `--export-release` mencari *release* keystore yang tidak ada → gagal signing (lihat gotcha #21) |
+| `run.bat` | Shortcut Windows: jalankan game **langsung dari source** (tanpa export/build) | Mode: default `play` (main scene `res://src/Main.tscn`), `--editor`, `--test` (delegasikan ke `scripts\run_tests.cmd --boot`), `--build` (export 4 platform sekaligus: `--export-release` ×3 + `--export-debug` Android), `--headless`, `--help`; argumen lain diteruskan ke Godot; binary Godot auto-deteksi di `%LOCALAPPDATA%\Godot\` (override dgn env `GODOT`) |
 | `AGENTS.md` | Mandatory read/update workflow for every AI agent | — |
 | `context.md` | This file | — |
 | `todo.md` | Task tracker + session log + known issues | — |
@@ -116,7 +122,7 @@ Es Cekek/
 
 | File | Purpose | Key API |
 |---|---|---|
-| `Player.gd` | `CharacterBody3D`, ROAM/AT_STAND state machine, WASD + joystick movement, camera follow | `state`, `stand_snap_distance`; `_read_move_input()`, `_interact()`, `release_stand()`; group `"player"`; constants `WALK_SPEED 4.0`, `RUN_SPEED 7.0`, `ACCELERATION 14.0`, `FRICTION 16.0` |
+| `Player.gd` | `CharacterBody3D`, ROAM/AT_STAND/**PREP** state machine, WASD + joystick movement, camera follow | `state`, `stand_snap_distance`; `_read_move_input()`, `_interact()`, `release_stand()`; group `"player"`; constants `WALK_SPEED 4.0`, `RUN_SPEED 7.0`, `ACCELERATION 14.0`, `FRICTION 16.0`; **Task 15 (first-person hands)**: `enum State { ROAM, AT_STAND, PREP }`, `enter_prep_mode(stand)`, `exit_prep_mode()`, `_enter_prep()`, `_exit_prep()`, `input_to_world()`; `@onready prep_rig` (`Node3D`, `top_level = true`), `prep_camera` (`Camera3D`), `left_hand`/`right_hand` (`Hand`), `prep_controller` (`PrepController`); constants `EYE_HEIGHT 1.6`, `PREP_STAND_OFFSET 1.05`, `LOOK_PITCH_LIMIT 35°`, `LOOK_YAW_LIMIT 60°`, `LOOK_SENS 0.22`, `TURN_BODY_SPEED 90°/s` |
 | `Customer.gd` | One customer: walks, orders, gets annoyed, evaluates the serve | `order_brand`, `price_tolerance`, `annoyance_level`, `state` (ARRIVING/WAITING/SERVED/LEAVING), `is_seated`, `slot_index`, `annoyance_rate`; `setup(brand, rate)`, `add_annoyance(n)`, `evaluate_serve(bag) -> Dictionary`, `leave(exit_point)`; signals `complain(line, annoyance)`, `served(result)`, `left_the_stand`; constants `TIP_MULTIPLIER 0.4`, `PRICE_COMPLAIN_AT 1.5`, `ANNOYANCE_MAX_WAIT 45.0`, `ANNOYANCE_TIERS [0.30,0.60,0.85,1.00]`, `COMPLAIN_LINES`; group `"customer"`; **3D feedback**: `body`/`head`/`bubble` nodes, `BUBBLE_TIME 2.4`, `BODY_COLOR`, `BODY_ANGRY_COLOR`, `update_feedback(delta)`, `target_crouch() -> float`, `apply_pose(crouch)`, `show_bubble(line)`, `hide_bubble()`, `_on_complain(line, annoyance)` |
 | `CustomerSpawner.gd` | Spawns customers, assigns seat vs queue slot, pauses at capacity | `location_def`, `stand`, `brands`, `customers`; `setup(def, stand, brands)`, `spawn_interval()`, `try_spawn()`, `forget(customer)`, `waiting_count()`, `next_customer()`, `clear_customers()`; `base_spawn_interval 9.0` |
 | `Location.gd` | Runtime script for every location scene | `location_def`, `spawn_offset`; `initialize(def)`, `stand_spawn_position()`, `_apply_palette()` (→ `TimeOfDay.set_sun_tint(accent)`), `_apply_props()`; children `StandSlot/Stand`, `CustomerSpawner`, `Props`, `Ground` |
@@ -137,23 +143,32 @@ Es Cekek/
 |---|---|---|
 | `Stand.gd` | Hub of the prep/serve loop: counter, equipment, prep station, seats, queue, serve transaction | `current_bag` (**property with a setter** → the 3D bag on the counter is always in sync), `spawner`; `set_spawner()`, `seat_positions()`, `queue_positions()`, `service_position()`, `offer_bag(bag)`, `take_bag()`, `serve_to(customer, bag)`, `serve_offered_to(customer)`, `snapshot() -> Dictionary` (incl. `price`, `cost`, `fair_min`, `fair_max`, `recommended`, `quality`), `interact_at_stand()`, `close_prep()`, `_on_prep_action(action, value)` (routes `ACTION_PRICE_INC/DEC/SET`), `_adjust_price(delta)`, `_set_price(value)` (never below `Bag.cost()`), `_do_serve()`; signals `served`, `bag_offered`, `prep_changed`; **3D bag**: `BAG_QUALITY_GOOD 60`, nodes `bag_visual`/`bag_shell`/`bag_liquid`/`bag_straw`, private `_setup_bag_materials()`, `_refresh_bag_visual()`, `_set_bag_material(mesh, mat)`; **SFX (Task 12)**: `_wire_sfx()`, `_connect_sfx(sig, sfx_id)`, `_on_prep_sfx(sfx_id)`, `_on_bag_built(bag)` → `Audio.play()`; **PENTING (Task 12f)**: `seat_positions()` / `queue_positions()` mengambil **SEMUA anak** `Seats`/`Queue` — jadi anak-anak itu HARUS berupa mesh (kursi/bangku Kenney), bukan marker `Node3D` terpisah, kalau tidak jumlah kursi & antrean jadi dobel |
 | `StandEquipment.gd` | Slot-based mirror of `Inventory.owned_tools` | `tools`; `refresh_from_inventory()`, `tool_in_slot(slot)`, `ice_capacity()` (reads the **cooler** slot only), `quality_mod()` (multiplies), `has_tool()`, `install(tool)` (replaces same slot), `slot_ids()`; signal `equipment_changed` |
-| `PrepStation.gd` | The build pipeline: pour → water → stir → ice → straw → Bag | `rack`, `state`, `selected_brand`, `volume`, `has_water`, `has_stir`, `ice_amount`, `has_straw`; `set_equipment()`, `set_rack()`, `ice_capacity()`, `tool_quality_mod()`, `open_build()`, `reset()`, `select_brand()`, `pour(amount)`, `add_volume()`, `add_water()`, `stir()`, `add_ice(spoons)`, `add_straw()`, `step_score()`, `compute_prep_quality()`, `estimated_cost()`, `can_build()`, `build_bag()`, `discard_bag()`, `snapshot()`; weights `W_VOLUME .25 / W_WATER .20 / W_STIR .20 / W_ICE .25 / W_STRAW .10`; **SFX signals (Task 12)**: `pour_done`, `water_added`, `stirred`, `ice_added`, `straw_added` (all argument-free) |
+| `PrepStation.gd` | The recipe machine: physical steps → Bag (Task 15) | `selected_brand`, `volume`, `has_water`, `has_stir`, `ice_amount`, `has_straw`, `vessel` (the plastic bag being filled), `step_history`, `out_of_order_count`; `set_equipment()`, `set_rack()`, `ice_capacity()`, `tool_quality_mod()`, `open_build()`, `reset()`, `select_brand()`, `pour(amount)`, `add_volume()`, `add_water()`, `stir()`, `add_ice(spoons)`, `add_straw()`, `set_vessel(obj)`, `record_step(step)`, `has_step(step)`, `expected_next_step()`, `is_complete()`, `missing_steps() -> Array[String]` (6 string Indonesia — bahan yang kurang, dipakai untuk komplain pelanggan), `step_score()` (× `OUT_OF_ORDER_PENALTY` per langkah salah urutan), `compute_prep_quality()`, `estimated_cost()`, `can_build()`, `build_bag()`, `discard_bag()`, `snapshot()`; weights `W_VOLUME .25 / W_WATER .20 / W_STIR .20 / W_ICE .25 / W_STRAW .10`; `STEP_ORDER [cut, pour_powder, pour_water, stir, add_ice, add_straw]`, `OUT_OF_ORDER_PENALTY 0.70`; **SFX signals (Task 12)**: `pour_done`, `water_added`, `stirred`, `ice_added`, `straw_added` (all argument-free) |
 
-### 3.6 `src/ui/` — UI
+### 3.6 `src/prep/` — first-person prep objects, hands & rules (Task 15)
+
+| File | Purpose | Key API |
+|---|---|---|
+| `PrepObject.gd` | One physical thing on the table (sachet, gunting, plastik, jerigen air, cooler es, serok, sendok, sedotan) | `enum Kind { SACHET, SCISSORS, PLASTIC_BAG, WATER_JUG, ICE_COOLER, ICE_SCOOP, SPOON, STRAW }`, `PICK_LAYER 2` (collision layer khusus ray mouse), group `"prep_object"`; state `brand`, `held_by`, `home_parent`, `home_transform`, `is_cut`, `has_powder`, `water_level`, `is_stirred`, `ice_spoons`, `has_straw`, `scoop_ice`, `is_emptied`; `is_vessel()`, `can_be_held()`, `reset_contents()`, `return_home()`, `short_label()`, `apply_brand_tint()` |
+| `Hand.gd` | One first-person hand; holds exactly one object | `enum HandSide { LEFT, RIGHT }` (**bukan `Side`** — bentrok dengan tipe global `Side` milik engine), `side`, `reach_radius 0.45`, `grip_offset (0,-0.05,-0.16)`, `holds`; `grab(obj) -> bool` (menolak kalau tangan penuh **atau objek sudah dipegang tangan lain**), `release()`, `release_at(world_pos, yaw)`, `grip_position()` |
+| `PrepController.gd` | Perekat input mouse/sentuh ↔ dua tangan; sekaligus pemilik serah-terima ke pelanggan | `active`, `stand`, `session`, `dragging`, `dragged`, `preferred`; `enter(stand)`, `exit()`, `swap_hands()` (**Q**), `deliver_to_nearest_customer()`; private `_begin_drag()`, `_end_drag()`, `_choose_hand(obj)` (**tangan terdekat menang; selisih < 0.05 → tangan pilihan**), `_update_drag()`, `_pick_object()`, `_cursor_on_work_plane()`, `work_plane_y()`, `_evaluate_rules()`, `_refresh_hud()`, `_check_customer(delta)`, `_try_handover()`, `_deliver(customer)`, `_nearest_customer()`; constants `REACH 1.30`, `CUSTOMER_TAKE_DIST 1.60`, `COMPLAIN_COOLDOWN 4.0` |
+| `RecipeRules.gd` | Buku aturan stateless: dua objek yang sedang dipegang menentukan langkah resep mana yang aktif | `INTERACT_DIST 0.28`, `SCOOP_SPOONS 2`; `evaluate(left, right) -> Dictionary` (kosong = tidak ada aturan yang cocok), `apply_step(session, result) -> bool`; private `_other_hand_object()`, `_resolve_target()`, `_nearest_table_object()`; 7 pemicu: `cut`, `pour_powder`, `pour_water`, `stir`, `fill_scoop`, `add_ice`, `add_straw` |
+
+### 3.7 `src/ui/` — UI
 
 | File | Purpose | Key API |
 |---|---|---|
 | `UILayer.tscn` | All UI nodes. Loaded at runtime by `UILayer.gd` into a `CanvasLayer` | see node tree §5 |
 | `VirtualJoystick.gd` | `Control` joystick (bottom-left) that publishes a move vector | `radius 110.0`, `dead_zone 0.12`; `_publish()` → cari node `UILayer` di rantai parent lalu panggil `set_move_vector()` (**sudah diperbaiki** — bug lama: method itu tidak pernah ada, jadi vektor tidak pernah sampai ke `Player`); `_find_ui_layer()` |
 
-### 3.7 `tests/`
+### 3.8 `tests/`
 
 | File | Purpose |
 |---|---|
-| `runtime_test.gd` | The whole test suite: **246 assertions** covering catalog, inventory, prep, serve, customers, economy, shop, day cycle, order queue / price slider / day-end detail (Task 9), the day/night lighting (Task 4-L), the 3D feedback (Task 12: bag mesh, brand tint, complaint bubble, annoyance pose), the procedural SFX (Task 12: 10 PCM streams, cache, pool, ambient loop, and the event→sound wiring), the **virtual joystick** (Task 11: joystick benar-benar mempublikasikan `UILayer.move_vector` saat digeser) and the **asset pipeline** (Task 12c–12f: `Counter` = StaticBody3D + collision shape valid, 3 kursi + 5 slot antrean, mesh stand memakai GLB Kenney). Also boots the real game scene. |
+| `runtime_test.gd` | The whole test suite: **314 assertions** covering catalog, inventory, prep, serve, customers, economy, shop, day cycle, order queue / price slider / day-end detail (Task 9), the day/night lighting (Task 4-L), the 3D feedback (Task 12: bag mesh, brand tint, complaint bubble, annoyance pose), the procedural SFX (Task 12: 10 PCM streams, cache, pool, ambient loop, and the event→sound wiring), the **virtual joystick** (Task 11: joystick benar-benar mempublikasikan `UILayer.move_vector` saat digeser), the **asset pipeline** (Task 12c–12f: `Counter` = StaticBody3D + collision shape valid, 3 kursi + 5 slot antrean, mesh stand memakai GLB Kenney) and the **first-person hands** (Task 15: 8 objek fisik di meja + 4 sachet, `PrepRig`/dua `Hand`/`PrepController`, aturan tangan terdekat, tukar tangan `Q`, 7 pemicu resep fisik, urutan langkah & penalti, `missing_steps()`, build memakai 1 sachet + 2 es, pelanggan komplain `"Kurang: …"`, pelanggan ambil sendiri, `enter`/`exit` controller). Also boots the real game scene. |
 | `runtime_test.tscn` | Harness scene (`extends Node`). **Run this, not `--script`.** |
 
-### 3.8 `data/` — the actual values
+### 3.9 `data/` — the actual values
 
 | File | Values |
 |---|---|
@@ -171,7 +186,7 @@ Es Cekek/
 | `tools/ice_cooler_large.tres` | shop, slot `cooler`, `capacity_mod 16`, `quality_mod 1.2`, `unlock_day 2` |
 | `tools/mixer.tres` | shop, slot `mixer`, `quality_mod > 1.0`, `unlock_day 3` |
 
-### 3.9 `src/` — entry point
+### 3.10 `src/` — entry point
 
 | File | Purpose | Key API |
 |---|---|---|
@@ -187,8 +202,16 @@ Es Cekek/
 ```
 CustomerSpawner.try_spawn()
   └─ Customer.setup(brand, rate)  →  UILayer.show_order(brand)      [callout]
-Player at stand → Stand.interact_at_stand() → UILayer.show_prep_panel(true)
-UILayer prep_action → Stand._on_prep_action → PrepStation.pour/water/stir/ice/straw
+Player at stand → Stand.interact_at_stand() → Player.enter_prep_mode(stand)
+  └─ view jadi first-person (PrepRig), PrepController.enter(stand) → UILayer.show_prep_panel(true)
+Player drag objek di meja dengan mouse:
+  PrepController._pick_object() → _choose_hand() → Hand.grab()
+  └─ dua tangan memegang + berdekatan → RecipeRules.evaluate() → RecipeRules.apply_step()
+       cut → pour_powder → pour_water → stir → fill_scoop → add_ice → add_straw  (urutan WAJIB)
+  └─ PrepStation.record_step() → step_score() (penalti urutan) → missing_steps()
+Resep jadi lengkap → PrepController._check_customer():
+  ├─ pelanggan datang ke konter → **mengambil tas sendiri** (auto-take, tanpa klik lagi)
+  └─ resep BELUM lengkap → Customer.complain_missing(missing_steps())  ["Kurang: ..."]
 PrepStation.build_bag()
   └─ Inventory.try_consume(brand, spoons)   ← INGREDIENTS CONSUMED HERE (Decision #1)
   └─ Bag{portions, ice_amount, prep_quality, sell_price}
@@ -301,20 +324,37 @@ Stand (Node3D, Stand.gd)
 ### `src/stand/PrepStation.tscn`
 ```
 PrepStation (Node3D, PrepStation.gd)
-├── Rack (Node3D)  pos (0, 0, -0.22)
-│   └── CuttingBoard  ← instance food/cutting-board.glb  pos (0.05, 0, 0)  scale (1, 1, 0.45)
-├── IceCooler      ← instance food/barrel.glb      pos (-0.42, 0, -0.2)  scale (0.45, 0.3, 0.45)
-├── WaterDispenser ← instance food/carton.glb      pos (0.48, 0, -0.2)   scale (0.9, 0.4, 0.9)
-└── StrawHolder    ← instance food/soda-can.glb     pos (0.75, 0, -0.18)  scale (0.8, 0.8, 0.8)
+├── WorkBoard      ← instance food/cutting-board.glb   pos (-0.05, 0.005, -0.28)
+├── Sachet_1       ← PrepObject (kind 0 SACHET) pos (-1.00, 0.03, -0.40)  → Mesh (food/bag-flat.glb)
+├── Sachet_2       ← PrepObject (kind 0 SACHET) pos (-0.82, 0.03, -0.40)  → Mesh
+├── Sachet_3       ← PrepObject (kind 0 SACHET) pos (-0.64, 0.03, -0.40)  → Mesh
+├── Sachet_4       ← PrepObject (kind 0 SACHET) pos (-0.46, 0.03, -0.40)  → Mesh
+├── Scissors       ← PrepObject (kind 1 SCISSORS) pos (-0.26, 0.015, -0.42) yaw 0.5
+│   └── Mesh → Blade_L / Blade_R / Handle_L / Handle_R   (MeshInstance3D prosedural)
+├── PlasticBag     ← PrepObject (kind 2 PLASTIC_BAG) pos (-0.04, 0.02, -0.26)
+│   └── Mesh (food/bag.glb) → Stack (food/bag-flat.glb)
+├── Spoon          ← PrepObject (kind 6 SPOON) pos (0.20, 0.02, -0.42) yaw -0.4 → Mesh (food/spoon.glb)
+├── StrawHolder    ← instance food/soda-can.glb   pos (0.44, 0.06, -0.44)
+├── Straw          ← PrepObject (kind 7 STRAW) pos (0.42, 0.02, -0.30) rot (1.5708, 0.6, 0) → Mesh (food/chopstick.glb)
+├── WaterJug       ← PrepObject (kind 3 WATER_JUG) pos (0.68, 0.08, -0.42) → Mesh (food/carton.glb)
+├── IceScoop       ← PrepObject (kind 5 ICE_SCOOP) pos (0.86, 0.04, -0.20) yaw 0.3 → Mesh (food/bowl.glb)
+└── IceCooler      ← PrepObject (kind 4 ICE_COOLER) pos (1.00, 0.10, -0.42) → Mesh (food/barrel.glb)
 ```
+> Tiap `PrepObject` punya `Area3D` + `CollisionShape3D` di **collision layer 2** (`PICK_LAYER`)
+> supaya bisa di-ray mouse, dan `home_parent`/`home_transform` untuk kembali ke tempat awal.
 
 ### `src/entities/Player.tscn`
 ```
 Player (CharacterBody3D, Player.gd)
 ├── CollisionShape3D
-├── Body (MeshInstance3D) → Head (MeshInstance3D)
-├── CameraRig (Node3D) → Camera3D
-└── InteractArea (Area3D) → InteractShape
+├── Body (Node3D) → Character (Node3D, KenneyCharacter.gd)
+├── CameraRig (Node3D) → Camera3D          (current = true — mode roam)
+├── InteractArea (Area3D) → InteractShape
+├── PrepRig (Node3D)                        top_level = true   ← mode first-person
+│   ├── Camera3D                            current = false
+│   ├── LeftHand  (Node3D, Hand.gd side=0)  pos (-0.24, -0.28, -0.45) → HandMesh
+│   └── RightHand (Node3D, Hand.gd side=1)  pos ( 0.24, -0.28, -0.45) → HandMesh
+└── PrepController (Node3D, PrepController.gd)
 ```
 
 ### `src/entities/Customer.tscn`
@@ -383,6 +423,22 @@ from the tree: `get_tree().root.get_node_or_null("Economy")` (see `UILayer._curr
 | `TOOL_QUALITY_MOD_BASE` (startup) | StandEquipment | 1.0 (multiplies with upgrades) |
 | `STARTING_MONEY` / `STARTING_ICE` / `STARTING_SACHETS_PER_BRAND` | Main.gd | 50000 / 40 / 20 |
 | `PRICE_STEP` | UILayer.gd | 500.0 |
+| `RecipeRules.INTERACT_DIST` | RecipeRules.gd | 0.28 |
+| `RecipeRules.SCOOP_SPOONS` | RecipeRules.gd | 2 |
+| `PrepStation.OUT_OF_ORDER_PENALTY` | PrepStation.gd | 0.70 |
+| `PrepController.REACH` | PrepController.gd | 2.2 (Task 16 — harus mencakup lebar meja 2,36 m) |
+| `PrepController.CUSTOMER_TAKE_DIST` | PrepController.gd | 1.60 |
+| `PrepController.COMPLAIN_COOLDOWN` | PrepController.gd | 4.0 |
+| `Hand.reach_radius` | Hand.gd | 0.45 |
+| `Hand.grip_offset` | Hand.gd | (0, -0.05, -0.16) |
+| `Player.EYE_HEIGHT` | Player.gd | 1.6 |
+| `Player.PREP_STAND_OFFSET` | Player.gd | 1.5 (Task 16 — 1,05 bikin ujung meja jatuh di luar layar) |
+| `Player.PREP_START_PITCH` | Player.gd | -25° (Task 16 — meja langsung terlihat) |
+| `Player.LOOK_PITCH_LIMIT` / `LOOK_YAW_LIMIT` | Player.gd | 35° / 60° |
+| `Player.LOOK_SENS` | Player.gd | 0.22 |
+| `Player.TURN_BODY_SPEED` | Player.gd | 90 °/s |
+| `Player.TOUCH_LOOK_SENS_SCALE` | Player.gd | 1.0 (Task 16 — knob tuning "feel" sentuh) |
+| `Player.TOUCH_MOUSE_SLOP` | Player.gd | 48 px (Task 16 — toleransi takeover mouse-tiruan ↔ jari) |
 
 ---
 
@@ -409,6 +465,10 @@ from the tree: `get_tree().root.get_node_or_null("Economy")` (see `UILayer._curr
 19. **A node in a `.tscn` WITHOUT `type=` silently inherits its parent's type** — e.g. `CounterShape` tanpa `type="CollisionShape3D"` jadi `StaticBody3D`; assignment `shape = SubResource(...)` **gagal tanpa error**, dan node itu hilang dari tree karena "was modified from inside an instance, but it has vanished". **Selalu tulis `type=`** untuk node non-instance.
 20. **GLB Kenney menghadap arah +Z** (sandaran kursi di -Z) — sama dengan mini-characters, jadi mesh di game harus **di-yaw 180°**. Perhatikan: AABB beberapa GLB **tidak simetris** (mis. `chair.glb` x=[0..0.2]), jadi yaw 180° **membalik offset X** → posisi harus dikoreksi.
 21. **Export Android: pakai `--export-debug`, bukan `--export-release`** — `--export-release` mencari *release* keystore (tidak ada di preset) → "Could not find release keystore, unable to export." APK sempat tertulis tapi **tidak signed** (`.idsig` juga tidak tergenerate). `--export-debug` memakai debug keystore dari `editor_settings-4.7.tres` → signed + `.idsig` tergenerate.
+22. **Ray-pick memakai state fisika frame SEBELUMNYA** — `intersect_ray()` dari `direct_space_state` melihat posisi **terakhir** yang sudah di-flush ke physics server. Kalau node dipindah (`reparent()` / `transform = ...`) lalu langsung di-ray-pick, hasilnya **salah** (objek dianggap tidak ada di sana) sampai satu `physics_frame` berlalu. Fix di test: `await get_tree().physics_frame` setelah memindahkan objek. Gotcha ini yang menyebabkan 8 asersi Task 16 gagal padahal posisi objek di layar sudah benar.
+23. **`pointing/emulate_touch_from_mouse=true` mengaktifkan emulasi DUA ARAH** (mouse→touch **dan** touch→mouse) → setiap gesture tiba dua kali (grab terputus, mousemove dobel). Fix Task 16: `pointing/emulate_touch_from_mouse=false` + `pointing/emulate_mouse_from_touch=true` di `project.godot`, lalu `Player` membedakan event mouse tiruan vs jari asli lewat `_touch_points`.
+24. **`InputEventScreenDrag` harus dicek SEBELUM `InputEventScreenTouch`** — di beberapa versi Godot `ScreenDrag` mewarisi `ScreenTouch`, jadi `event is InputEventScreenTouch` ikut true untuk drag.
+25. **`get_type_name()` tidak ada di Godot 4.7** — pakai `get_class()`. Salah panggil = error script yang **menggagalkan seluruh fungsi** (bukan cuma baris itu), jadi event pointer diam-diam mati.
 
 ---
 
@@ -438,14 +498,16 @@ from the tree: `get_tree().root.get_node_or_null("Economy")` (see `UILayer._curr
 | 11c | Perbaikan bug virtual joystick (`UILayer.set_move_vector` tidak pernah ada) | ✅ Done (233/233 hijau, boot OK) |
 | 11 | Android QA: install APK di perangkat asli + uji joystick / prep / UI | ⏳ Pending (butuh perangkat Android — `adb devices` kosong) |
 | 12 | Polish: SFX ✅, complain vocals, music loop ✅, VFX, location colors | ⏳ Pending (SFX + music done; visual 3D ✅) |
+| 15 | **First-person hands**: panel prep lama dihapus total; semua langkah es dilakukan manual dengan drag objek 3D (dua tangan, tangan terdekat menang, `Q` tukar tangan); pelanggan komplain kalau belum siap, ambil sendiri kalau siap | ✅ Done (314/314 hijau, boot OK) |
+| 16 | **Kontrol layar sentuh mode first-person**: mouse + multi-jari berbagi satu mesin state pointer (`Player.handle_prep_pointer`), 1 jari di objek = ambil, 1/2 jari di area kosong = lihat, takeover mouse-tiruan ↔ jari, tombol layar **Tukar Tangan** (pengganti `Q`) & **Putar Badan** (pengganti `R`), geometri kamera diperbaiki supaya seluruh meja masuk layar | ✅ Done (346/346 hijau) — feel device = **TUGAS MANUAL user** (T18) |
 
 ---
 
 ## 11. Test Status
 
 - **Suite**: `tests/runtime_test.gd` run as a scene (`res://tests/runtime_test.tscn`)
-- **Last known result**: **246/246 checks pass, 0 fail** + "game booted without errors"
-  (`scripts\run_tests.cmd --boot`, 2026-10-21, after the Kenney stand-props pass)
+- **Last known result**: **346/346 checks pass, 0 fail** (`scripts\run_tests.cmd`, 2026-10-22,
+  after the Task 16 touch-controls pass)
 - **Command**: `scripts\run_tests.cmd`  (add `--boot` to also boot the real game headless)
 - The suite covers the full loop: catalog → prep → customer → serve → economy → day cycle,
   plus the Task 8 shop/rent, the Task 9 order queue / price slider / day-end detail,
@@ -456,7 +518,16 @@ from the tree: `get_tree().root.get_node_or_null("Economy")` (see `UILayer._curr
   (joystick benar-benar mempublikasikan `UILayer.move_vector` saat digeser, dan
   vektor kembali nol saat dilepas) and the **asset pipeline** (Task 12c–12f: `Counter`
   bertipe `StaticBody3D` **dengan collision shape yang valid**, tepat 3 kursi + 5 slot
-  antrean, dan mesh stand/rupa/prep memang GLB Kenney, bukan box primitif).
+  antrean, dan mesh stand/rupa/prep memang GLB Kenney, bukan box primitif) and the
+  **first-person hands** (Task 15: 8 objek fisik di meja + 4 sachet, `PrepRig`/dua `Hand`/
+  `PrepController` di `Player`, aturan tangan terdekat, tukar tangan `Q`, 7 pemicu resep
+  fisik, urutan langkah + penalti, `missing_steps()`, build memakai 1 sachet + 2 es,
+  pelanggan komplain `"Kurang: …"`, pelanggan ambil sendiri + uang bertambah,
+  `enter`/`exit` controller) and the **touch controls** (Task 16: seluruh objek meja masuk
+  layar first-person dan bisa di-ray-pick, API pointer `begin_drag_at`/`set_pointer`/
+  `end_drag_at`, routing event mouse (klik = ambil, lepas = letakkan), takeover mouse
+  tiruan → jari, satu jari di area kosong = melihat (tidak mengambil), dua jari = melihat,
+  tombol layar **Tukar Tangan**/**Putar Badan** benar-benar mengubah keadaan).
 - Godot prints `WARNING: N ObjectDB instances were leaked at exit` in headless mode.
   The count is **non-deterministic** (27 / 43 / 61 across runs) and also occurs on the
   plain `--boot` run, so it comes from Godot's own shutdown ordering (deferred frees
@@ -511,10 +582,108 @@ from the tree: `get_tree().root.get_node_or_null("Economy")` (see `UILayer._curr
 | 16 | Sebagian mesh Kenney memakai `baseColorFactor` (warna per-vertex), sebagian lagi merujuk `Textures/colormap.png` eksternal. 4 pack punya `colormap` (mini, commercial, suburban, food); `roads` & `furniture` tidak punya folder `Textures/` → 4 colormap, bukan 5 | `assets/kenney/*/Textures/` | 🟢 documented |
 | 17 | Character/pelanggan pakai GLB mini-characters dengan `MODEL_SCALE 2.53` + `MODEL_YAW PI`; **pose kesal** (crouch) yang sebelumnya berupa `body.scale.y` mungkin perlu diselaraskan dengan tinggi model | `src/entities/KenneyCharacter.gd`, `src/entities/Customer.gd` | 🟡 open (perlu taste pass) |
 | 18 | **QA perangkat Android asli belum dilakukan** — tapi sekarang **tidak butuh adb sama sekali**: APK sudah diverifikasi signed (`apksigner verify` → "Verifies", skema v2 + v3, signer `CN=Android Debug`), jadi bisa di-*sideload* cukup dengan menyalin file `.apk` ke HP lalu mengetuknya di file manager. Yang tersisa cuma "belum pernah dijalankan di HP" | `build/android/EsCekek.apk` | 🟡 open (menunggu dicoba di HP) |
+| 19 | **Mode prep first-person (Task 15) baru diverifikasi lewat asersi headless** — belum pernah di-*eye-ball* di editor. Posisi mesh gunting/serok/sendok di meja, jangkauan `Hand.reach_radius` (0,45 m), dan jarak plumpeng antarobjek mungkin perlu taste pass. (Build 4 target **sudah** di-ekspor ulang pada T14 — `build/` kini berisi versi first-person) | `src/prep/*`, `src/stand/PrepStation.tscn` | 🟡 open (taste pass visual) |
+| 20 | ~~**Kontrol sentuh mode racik first-person masih setengah jadi**~~ → **DIPERBAIKI (Task 16)**: satu mesin state pointer di `Player.handle_prep_pointer()` menangani mouse + multi-jari (`InputEventScreenTouch` / `InputEventScreenDrag`), plus tombol layar **Tukar Tangan** & **Putar Badan** di HUD prep. Emulasi touch Godot dimatikan (`emulate_touch_from_mouse=false`) supaya event tidak dobel | `src/entities/Player.gd`, `src/prep/PrepController.gd`, `src/autoload/UILayer.gd`, `project.godot` | 🟢 fixed (346/346) |
+| 21 | **Geometri kamera first-person salah** (ditemukan Task 16): kamera berdiri 1,05 m dari konter dengan pitch 0° → sudut pandang ke meja ≈ 46°, melebihi batas pitch 35° → **seluruh meja jatuh di bawah/di luar layar** dan tidak bisa di-drag sama sekali (Sachet_1 x=-176 px, IceCooler x=1430 px di viewport 1280×720). Fix: `PREP_STAND_OFFSET 1.05 → 1.5`, `PREP_START_PITCH = -25°` (baru), `PrepController.REACH 1.30 → 2.2`. Semua objek kini ter-proyeksi di dalam layar (x 219–1044, y 370–419) | `src/entities/Player.gd`, `src/prep/PrepController.gd` | 🟢 fixed (346/346) |
+| 22 | **"Feel"-nya kontrol sentuh BELUM diverifikasi di perangkat** — seluruh Task 16 diverifikasi lewat asersi headless. Sesuai permintaan user, **tes device dijadikan TUGAS MANUAL**: user yang mencoba di HP lalu memberi verdict (besar kecil sensitivitas look, apakah objek gampang dipegang, apakah tombol TUKAR/PUTAR reachable). Knob tuning tersedia: `Player.TOUCH_LOOK_SENS_SCALE`, `TOUCH_MOUSE_SLOP`, `PREP_START_PITCH` | `src/entities/Player.gd` | 🟡 open (menunggu user) |
+| 23 | **Build 4 target masih versi SEBELUM Task 16** — `build/` terakhir di-ekspor pada T14 (Task 15). Perubahan Task 16 (kontrol sentuh + geometri kamera) **belum** masuk ke `build/windows|linux|macos|android`. Perlu `run.bat --build` ulang sebelum APK dikirim ke HP | `build/`, `export_presets.cfg` | 🟡 open (tunggu user) |
 
 ---
 
 ## 13. Recent Changes (newest first)
+
+### Task 16 — Kontrol layar sentuh mode first-person + fix geometri kamera (2026-10-22)
+
+1. **Satu mesin state pointer** untuk mouse + multi-jari: `Player.handle_prep_pointer(event)`
+   (publik, biar bisa diuji). Event `InputEventScreenTouch` / `InputEventScreenDrag` /
+   `InputEventMouseButton` / `InputEventMouseMotion` semuanya masuk lewat satu jalur.
+   - 1 jari di objek → **ambil**; 1 jari di area kosong → **melihat**; 2 jari → **melihat**.
+   - Geser jari saat objek dipegang → objek ikut bergerak (bukan memutar pandangan).
+   - `InputEventScreenDrag` dicek **sebelum** `InputEventScreenTouch` (gotcha #24).
+2. **Takeover mouse-tiruan ↔ jari**: Android mengirim mouse tiruan sebelum event sentuh asli.
+   Kalau mouse tiruan sudah grabbing dan jarinya dalam radius `TOUCH_MOUSE_SLOP` (48 px),
+   jari itu yang mengambil alih drag-nya (`_mouse_dragging = false`).
+3. **Emulasi input Godot dimatikan** (`project.godot`):
+   `pointing/emulate_touch_from_mouse=false` + `pointing/emulate_mouse_from_touch=true`.
+   Sebelumnya `true` menyebabkan event tiba **dobel** (grab terputus, mousemove dobel) —
+   gotcha #23.
+4. **Tombol layar** di HUD prep (`UILayer.gd`): **"Tukar Tangan"** (pengganti `Q`) dan
+   **"Putar Badan"** (pengganti `R`), keduanya lewat sinyal `UILayer.prep_action`
+   (`ACTION_SWAP_HAND` / `ACTION_TURN_BODY`) → `Player._on_prep_action()`.
+   Joystick virtual disembunyikan selama mode prep.
+5. **API pointer eksplisit di `PrepController`**: `begin_drag_at(screen_pos)`,
+   `set_pointer(screen_pos)`, `end_drag_at(screen_pos)` — controller **tidak** lagi
+   membaca event input sendiri, jadi mouse dan jari benar-benar berbagi satu jalur.
+6. **Bug geometri kamera diperbaiki** (masalah nyata, bukan cuma test):
+   `PREP_STAND_OFFSET 1.05 → 1.5`, konstanta baru `PREP_START_PITCH = -25°`,
+   `PrepController.REACH 1.30 → 2.2`. Sebelumnya seluruh meja berada di luar layar
+   (Tidak bisa di-drag) — sekarang semua objek ter-proyeksi di dalam viewport.
+7. **Gotcha baru #22**: ray-pick membaca state fisika frame sebelumnya → setelah
+   `reparent()`/`transform` harus menunggu satu `physics_frame` sebelum object bisa
+   di-pick. Ini yang bikin 8 asersi Task 16 gagal sampai ketahuan.
+8. **Tes**: `_test_task16()` dengan 8 blok asersi (A–H) + helper `_find_pick_point()` /
+   `_find_empty_point()` / `_restore_prep_state()` yang mencari koordinat layar secara
+   dinamis (bukan hardcode). **346/346 hijau, 0 gagal**.
+9. **Alat ukur sementara dihapus**: `tools/input_probe.gd` + `tools/input_probe.tscn`
+   (probe input yang sempat dipakai mendiagnosis emulasi) sudah dihapus.
+
+### T14 — re-export 4 build + `run.bat` — main game dari source tanpa perlu build (2026-10-22)
+
+1. **4 build di-ekspor ulang** via `run.bat --build` (semua preset sukses):
+   `build/windows/EsCekek.exe` (109,1 MB, boot bersih), `build/linux/EsCekek.x86_64` (73,5 MB),
+   `build/macos/EsCekek.zip` (62,9 MB), `build/android/EsCekek.apk` (89,8 MB, **signed** —
+   Android wajib `--export-debug`, gotcha #21).
+2. **File baru `run.bat`** di root project → main game **langsung dari source**, tanpa export:
+   - default (tanpa argumen) → `godot --path <project>` → main scene `res://src/Main.tscn`
+   - `--editor` → buka Godot Editor · `--test` → smoke test + boot check
+   - `--build` → export 4 platform sekaligus (`--export-release` ×3 + `--export-debug` Android)
+   - `--headless` → game tanpa jendela · `--help` → bantuan
+   - Binary Godot auto-deteksi di `%LOCALAPPDATA%\Godot\` (override dgn env `GODOT`).
+3. File batch disimpan **CRLF tanpa BOM** — BOM bikin baris pertama (`@echo off`) gagal dibaca
+   dan cmd menampilkan `'﻿@echo' is not recognized`.
+
+### `run.bat` — main game dari source tanpa perlu build (2026-10-22)
+
+1. File baru di root project: `run.bat`. Klik ganda → game langsung jalan dari source code
+   (`godot --path <project>`), **tanpa export/build sama sekali**.
+2. Mode yang tersedia: default `play`, `--editor`, `--test` (delegasikan ke
+   `scripts\run_tests.cmd --boot`), `--build` (export 4 platform sekaligus:
+   `--export-release` ×3 + `--export-debug` untuk Android), `--headless`, `--help`.
+   Argumen lain diteruskan mentah ke Godot.
+3. Binary Godot dideteksi otomatis di `%LOCALAPPDATA%\Godot\` (versi terbaru lebih dulu),
+   bisa di-override dengan env var `GODOT`. File disimpan CRLF tanpa BOM (batch file
+   dengan BOM bikin baris pertama gagal dibaca).
+
+### Task 15: first-person hands — panel prep lama dibongkar total (2026-10-22)
+
+1. **Panel prep lama DIHAPUS.** `UILayer` tidak lagi punya tombol brand/volume/air/aduk/es/sedotan.
+   Yang tersisa adalah HUD minimal: harga, status pesanan, dan tombol **Serahkan** saat tas siap.
+2. **Objek fisik di meja** (`src/stand/PrepStation.tscn`): 4 sachet (1 per brand) + gunting +
+   tumpukan plastik + jerigen air + cooler es + serok + sendok aduk + sedotan — semuanya
+   `PrepObject` (kind 0..7) yang bisa di-drag mouse.
+3. **Rig first-person** di `Player.tscn`: `PrepRig` (`top_level = true`) berisi `Camera3D`,
+   `LeftHand`, `RightHand` (masing-masing `Hand`), plus `PrepController` sebagai anak `Player`.
+   `Player` punya state baru `PREP`; `_enter_prep()` menaruh rig di depan konter
+   (`PREP_STAND_OFFSET 1.05`, `EYE_HEIGHT 1.6`), menyembunyikan badan, dan menyalakan
+   kamera prep (`prep_camera.current = true`).
+4. **Aturan tangan terdekat** (`PrepController._choose_hand()`): objek dekat tangan kanan diambil
+   tangan kanan, dekat tangan kiri → tangan kiri; `Q` (`swap_hands`) menukar isi kedua tangan.
+5. **Resep fisik** (`RecipeRules.gd`): 7 pemicu — `cut` → `pour_powder` → `pour_water` → `stir`
+   → `fill_scoop` → `add_ice` → `add_straw`. `PrepStation.record_step()` mencatat urutannya;
+   langkah salah urutan menambah `out_of_order_count` dan menurunkan `step_score()`
+   (`OUT_OF_ORDER_PENALTY 0.70`). Brand diambil dari sachet fisik yang dipegang.
+6. **Serah-terima & komplain**: pelanggan yang esnya sudah siap **mengambil tas sendiri**
+   (`_check_customer()` → `_deliver()`), sedangkan kalau belum siap pelanggan **komplain**
+   dengan daftar bahan yang kurang (`PrepStation.missing_steps()` → `"Kurang: Belum ada es!, …"`).
+7. **Berkas baru `src/prep/`**: `PrepObject.gd`, `Hand.gd`, `PrepController.gd`, `RecipeRules.gd`.
+   `PrepObject` memakai **collision layer 2** (`PICK_LAYER`) supaya bisa di-ray mouse.
+   Enum `Side` di-*rename* jadi `HandSide` karena bentrok dengan tipe global `Side` milik engine.
+8. **Tes**: `_test_task15()` dengan 12 blok asersi (A–L) — objek & jenisnya, rig, tangan
+   terdekat, tukar tangan, 7 pemicu resep, urutan + penalti, `missing_steps()`, build memakai
+   1 sachet + 2 es (Decision #1 tetap berlaku), komplain pelanggan, ambil otomatis + uang
+   bertambah, `enter`/`exit` controller. **314/314 hijau, boot bersih** (`scripts\run_tests.cmd --boot`).
+9. **Dokumentasi**: `context.md` (indeks file + `src/prep/`, alur penjualan, scene tree,
+   parameter tuning, test status, known issues), `todo.md` dan `Readme.md` disinkronkan.
 
 ### Latest — Commit ke GitHub: `origin/master` = `6f6b967` (2026-10-21)
 

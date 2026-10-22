@@ -41,8 +41,10 @@ position = Vector3(0, 0.46, 0)
 [node name="StandEquipment" type="Node" parent="."]
 script = ExtResource("2_equipment")
 
+; Area prep di tengah konter (Task 15): semua alat & bahan ada di sini
+; sebagai objek fisik yang bisa dipegang tangan.
 [node name="PrepStation" parent="." instance=ExtResource("3_prepstation")]
-position = Vector3(-0.6, 0.92, 0)
+position = Vector3(0, 0.92, 0)
 
 [node name="CashRegister" parent="." instance=ExtResource("ken_register")]
 position = Vector3(0.85, 0.92, 0.05)
